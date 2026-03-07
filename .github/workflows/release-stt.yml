@@ -37,7 +37,7 @@ jobs:
 
       - name: Package
         shell: bash
-        run: cd publish && 7z a -tzip PulsaSTT-win-x64.zip PulsaSTT/
+        run: cd publish/PulsaSTT && 7z a -tzip ../PulsaSTT-win-x64.zip .
 
       - name: Create Release
         uses: softprops/action-gh-release@v2

@@ -37,7 +37,7 @@ jobs:
 
       - name: Package
         shell: bash
-        run: cd publish && 7z a -tzip PulsaLLM-win-x64.zip PulsaLLM/
+        run: cd publish/PulsaLLM && 7z a -tzip ../PulsaLLM-win-x64.zip .
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
