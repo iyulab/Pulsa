@@ -20,7 +20,15 @@ public class TranscribeWorker(
     {
         var opts = options.Value;
         logger.LogInformation("Loading STT model: {Model}...", opts.Model);
-        await using var transcriber = await LocalTranscriber.LoadAsync(opts.Model, cancellationToken: stoppingToken);
+        var progress = new Progress<LMSupply.DownloadProgress>(p =>
+        {
+            if (p.TotalBytes > 0)
+                logger.LogInformation("Downloading {File}: {Pct:F1}% ({Downloaded:F1}/{Total:F1} MB)",
+                    p.FileName, p.PercentComplete, p.BytesDownloaded / 1_048_576.0, p.TotalBytes / 1_048_576.0);
+            else
+                logger.LogInformation("Downloading {File}: {Downloaded:F1} MB", p.FileName, p.BytesDownloaded / 1_048_576.0);
+        });
+        await using var transcriber = await LocalTranscriber.LoadAsync(opts.Model, progress: progress, cancellationToken: stoppingToken);
         logger.LogInformation("STT model loaded. GPU: {Gpu} [{Providers}]",
             transcriber.IsGpuActive, string.Join(", ", transcriber.ActiveProviders));
 
