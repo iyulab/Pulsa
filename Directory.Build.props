@@ -6,4 +6,11 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
+  <!-- Local NuGet package source for development -->
+  <PropertyGroup Condition="Exists('D:\local-nuget-packages')">
+    <RestoreAdditionalProjectSources>
+      $(RestoreAdditionalProjectSources);D:\local-nuget-packages
+    </RestoreAdditionalProjectSources>
+  </PropertyGroup>
+
 </Project>
