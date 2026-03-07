@@ -3,6 +3,7 @@ name: Release PulsaAudioConvert
 on:
   push:
     tags: ['audio-convert-v*']
+  workflow_dispatch:
 
 jobs:
   release:
@@ -20,7 +21,9 @@ jobs:
       - name: Extract version
         id: version
         shell: bash
-        run: echo "version=${GITHUB_REF_NAME#audio-convert-v}" >> $GITHUB_OUTPUT
+        run: |
+          version=$(grep -oP '(?<=<Version>)[^<]+' src/PulsaAudioConvert/PulsaAudioConvert.csproj)
+          echo "version=${version}" >> $GITHUB_OUTPUT
 
       - name: Publish
         run: >
@@ -29,7 +32,6 @@ jobs:
           -r win-x64
           --self-contained
           -p:PublishSingleFile=true
-          -p:Version=${{ steps.version.outputs.version }}
           -o publish/PulsaAudioConvert
 
       - name: Package
@@ -39,5 +41,6 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: audio-convert-v${{ steps.version.outputs.version }}
           name: PulsaAudioConvert v${{ steps.version.outputs.version }}
           files: publish/PulsaAudioConvert-win-x64.zip

@@ -1,5 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk.Worker">
 
+  <PropertyGroup>
+    <Version>0.1.0</Version>
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\Pulsa\Pulsa.csproj" />
     <PackageReference Include="FFMpegCore" />

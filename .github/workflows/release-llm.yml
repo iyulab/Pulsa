@@ -3,6 +3,7 @@ name: Release PulsaLLM
 on:
   push:
     tags: ['llm-v*']
+  workflow_dispatch:
 
 jobs:
   release:
@@ -20,7 +21,9 @@ jobs:
       - name: Extract version
         id: version
         shell: bash
-        run: echo "version=${GITHUB_REF_NAME#llm-v}" >> $GITHUB_OUTPUT
+        run: |
+          version=$(grep -oP '(?<=<Version>)[^<]+' src/PulsaLLM/PulsaLLM.csproj)
+          echo "version=${version}" >> $GITHUB_OUTPUT
 
       - name: Publish
         run: >
@@ -29,7 +32,6 @@ jobs:
           -r win-x64
           --self-contained
           -p:PublishSingleFile=true
-          -p:Version=${{ steps.version.outputs.version }}
           -o publish/PulsaLLM
 
       - name: Package
@@ -39,5 +41,6 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: llm-v${{ steps.version.outputs.version }}
           name: PulsaLLM v${{ steps.version.outputs.version }}
           files: publish/PulsaLLM-win-x64.zip
