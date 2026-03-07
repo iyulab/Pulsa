@@ -98,9 +98,15 @@ public class UpdateService(
             ?? Path.Combine(appDir, $"{appName}.exe");
         var scriptSlug = appName.ToLowerInvariant().Replace('.', '-');
         var scriptPath = Path.Combine(Path.GetTempPath(), $"{scriptSlug}-update.bat");
+        var pid = Environment.ProcessId;
         var script = $"""
             @echo off
-            timeout /t 2 /nobreak >nul
+            :wait
+            tasklist /fi "PID eq {pid}" 2>nul | find "{pid}" >nul
+            if not errorlevel 1 (
+                timeout /t 1 /nobreak >nul
+                goto wait
+            )
             robocopy "{sourceDir}" "{appDir}" /s /xf appsettings.json appsettings.*.json /xd logs _update >nul
             rmdir /s /q "{updateDir}" 2>nul
             start "" "{exePath}"
