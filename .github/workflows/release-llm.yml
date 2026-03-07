@@ -22,7 +22,7 @@ jobs:
         id: version
         shell: bash
         run: |
-          version=$(grep -oP '(?<=<Version>)[^<]+' src/PulsaLLM/PulsaLLM.csproj)
+          version=$(sed -n 's/.*<Version>\([^<]*\)<.*/\1/p' src/PulsaLLM/PulsaLLM.csproj)
           echo "version=${version}" >> $GITHUB_OUTPUT
 
       - name: Publish
