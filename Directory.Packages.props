@@ -17,8 +17,8 @@
     <PackageVersion Include="Serilog.Sinks.File" Version="7.0.0" />
 
     <!-- LMSupply -->
-    <PackageVersion Include="LMSupply.Generator" Version="0.20.0" />
-    <PackageVersion Include="LMSupply.Transcriber" Version="0.20.0" />
+    <PackageVersion Include="LMSupply.Generator" Version="0.20.1" />
+    <PackageVersion Include="LMSupply.Transcriber" Version="0.20.1" />
 
     <!-- Others -->
     <PackageVersion Include="FFMpegCore" Version="5.4.0" />
