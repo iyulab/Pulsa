@@ -1,0 +1,43 @@
+name: Release PulsaSTT
+
+on:
+  push:
+    tags: ['stt-v*']
+
+jobs:
+  release:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+          dotnet-quality: 'preview'
+
+      - name: Extract version
+        id: version
+        shell: bash
+        run: echo "version=${GITHUB_REF_NAME#stt-v}" >> $GITHUB_OUTPUT
+
+      - name: Publish
+        run: >
+          dotnet publish src/PulsaSTT/PulsaSTT.csproj
+          -c Release
+          -r win-x64
+          --self-contained
+          -p:PublishSingleFile=true
+          -p:Version=${{ steps.version.outputs.version }}
+          -o publish/PulsaSTT
+
+      - name: Package
+        shell: bash
+        run: cd publish && 7z a -tzip PulsaSTT-win-x64.zip PulsaSTT/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: PulsaSTT v${{ steps.version.outputs.version }}
+          files: publish/PulsaSTT-win-x64.zip
