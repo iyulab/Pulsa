@@ -15,10 +15,13 @@ jobs:
         include:
           - project: src/PulsaSTT/PulsaSTT.csproj
             prefix: stt-v
+            workflow: release-stt.yml
           - project: src/PulsaLLM/PulsaLLM.csproj
             prefix: llm-v
+            workflow: release-llm.yml
           - project: src/PulsaAudioConvert/PulsaAudioConvert.csproj
             prefix: audio-convert-v
+            workflow: release-audio-convert.yml
     steps:
       - uses: actions/checkout@v4
         with:
@@ -47,3 +50,9 @@ jobs:
         run: |
           git tag ${{ steps.check.outputs.tag }}
           git push origin ${{ steps.check.outputs.tag }}
+
+      - name: Trigger release
+        if: steps.check.outputs.changed == 'true'
+        run: gh workflow run ${{ matrix.workflow }}
+        env:
+          GH_TOKEN: ${{ github.token }}
