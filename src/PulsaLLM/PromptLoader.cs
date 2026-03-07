@@ -13,7 +13,7 @@ public static class PromptLoader
         return Parse(content);
     }
 
-    internal static PromptData Parse(string content)
+    public static PromptData Parse(string content)
     {
         var frontmatter = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
@@ -63,6 +63,8 @@ public static class PromptLoader
             result.ApiKey = apiKey;
         if (frontmatter.TryGetValue("host", out var host))
             result.Host = host;
+        if (frontmatter.TryGetValue("path_prefix", out var pathPrefix))
+            result.PathPrefix = pathPrefix;
 
         return result;
     }

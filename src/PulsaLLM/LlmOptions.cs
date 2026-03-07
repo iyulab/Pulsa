@@ -70,6 +70,9 @@ public class ProviderOptions
     /// <summary>API host (for openai-compatible)</summary>
     public string Host { get; set; } = "";
 
+    /// <summary>API path prefix (default: /v1). e.g. /v1-openai</summary>
+    public string PathPrefix { get; set; } = "/v1";
+
     /// <summary>Max tokens for generation</summary>
     public int MaxTokens { get; set; } = 4096;
 }

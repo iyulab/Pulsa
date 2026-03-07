@@ -1,12 +1,13 @@
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Options;
 using Pulsa;
-using PulsaLLM.Providers;
 
 namespace PulsaLLM.Workers;
 
 public class LlmWorker(
     FileQueue queue,
     IOptions<LlmOptions> options,
+    IChatClient chatClient,
     ILogger<LlmWorker> logger) : BackgroundService
 {
     protected override Task ExecuteAsync(CancellationToken stoppingToken)
@@ -31,18 +32,16 @@ public class LlmWorker(
         }
 
         var promptData = await PromptLoader.LoadAsync(promptPath, stoppingToken);
-        var providerOptions = PromptLoader.ApplyOverrides(opts.Provider, promptData.Frontmatter);
 
-        logger.LogInformation("LLM worker started. Provider: {Type}, Model: {Model}, Pattern: {Pattern} -> *.{Slug}.md",
-            providerOptions.Type, providerOptions.Model, opts.FilePattern, opts.PromptSlug);
-
-        await using var provider = await CreateProviderAsync(providerOptions, stoppingToken);
+        logger.LogInformation(
+            "LLM worker started. Pattern: {Pattern} -> *.{Slug}.md",
+            opts.FilePattern, opts.PromptSlug);
 
         await foreach (var filePath in queue.Reader.ReadAllAsync(stoppingToken))
         {
             try
             {
-                await ProcessAsync(provider, filePath, promptData.SystemPrompt, opts, stoppingToken);
+                await ProcessAsync(filePath, promptData.SystemPrompt, opts, stoppingToken);
             }
             finally
             {
@@ -51,7 +50,8 @@ public class LlmWorker(
         }
     }
 
-    private async Task ProcessAsync(ILlmProvider provider, string filePath, string systemPrompt, LlmOptions opts, CancellationToken ct)
+    private async Task ProcessAsync(
+        string filePath, string systemPrompt, LlmOptions opts, CancellationToken ct)
     {
         if (!File.Exists(filePath))
         {
@@ -66,7 +66,8 @@ public class LlmWorker(
             return;
         }
 
-        if (!await FileHelper.WaitUntilReadyAsync(filePath, opts.FileReadyRetries, opts.FileReadyRetryDelayMs, logger, ct))
+        if (!await FileHelper.WaitUntilReadyAsync(
+                filePath, opts.FileReadyRetries, opts.FileReadyRetryDelayMs, logger, ct))
             return;
 
         var tempPath = outputPath + ".tmp";
@@ -74,7 +75,15 @@ public class LlmWorker(
         try
         {
             var content = await File.ReadAllTextAsync(filePath, ct);
-            var result = await provider.GenerateAsync(systemPrompt, content, ct);
+
+            var messages = new List<ChatMessage>
+            {
+                new(ChatRole.System, systemPrompt),
+                new(ChatRole.User, content),
+            };
+
+            var response = await chatClient.GetResponseAsync(messages, cancellationToken: ct);
+            var result = response.Text ?? "";
 
             await File.WriteAllTextAsync(tempPath, result, ct);
             File.Move(tempPath, outputPath, overwrite: false);
@@ -91,14 +100,5 @@ public class LlmWorker(
             logger.LogError(ex, "LLM processing failed: {Path}", filePath);
             FileHelper.TryDelete(tempPath);
         }
-    }
-
-    private async Task<ILlmProvider> CreateProviderAsync(ProviderOptions opts, CancellationToken ct)
-    {
-        return opts.Type.ToLowerInvariant() switch
-        {
-            "openai" or "openai-compatible" => new OpenAiProvider(opts, logger),
-            _ => await LmSupplyProvider.CreateAsync(opts, logger, ct),
-        };
     }
 }
