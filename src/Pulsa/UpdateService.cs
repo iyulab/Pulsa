@@ -87,6 +87,12 @@ public class UpdateService(
         ZipFile.ExtractToDirectory(tempZip, updateDir);
         File.Delete(tempZip);
 
+        // If zip contains a single sub-folder, use that as the source
+        var sourceDir = updateDir;
+        var subDirs = Directory.GetDirectories(updateDir);
+        if (subDirs.Length == 1 && Directory.GetFiles(updateDir).Length == 0)
+            sourceDir = subDirs[0];
+
         // Create update script (preserves appsettings*.json and logs/)
         var exePath = Environment.ProcessPath
             ?? Path.Combine(appDir, $"{appName}.exe");
@@ -95,7 +101,7 @@ public class UpdateService(
         var script = $"""
             @echo off
             timeout /t 2 /nobreak >nul
-            robocopy "{updateDir}" "{appDir}" /s /xf appsettings.json appsettings.*.json /xd logs _update >nul
+            robocopy "{sourceDir}" "{appDir}" /s /xf appsettings.json appsettings.*.json /xd logs _update >nul
             rmdir /s /q "{updateDir}" 2>nul
             start "" "{exePath}"
             del "%~f0"
