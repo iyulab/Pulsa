@@ -17,6 +17,7 @@ jobs:
         project:
           - src/PulsaSTT/PulsaSTT.csproj
           - src/PulsaAudioConvert/PulsaAudioConvert.csproj
+          - src/PulsaLLM/PulsaLLM.csproj
     steps:
       - uses: actions/checkout@v4
 

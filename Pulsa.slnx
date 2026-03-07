@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="src/Pulsa/Pulsa.csproj" />
+  <Project Path="src/PulsaAudioConvert/PulsaAudioConvert.csproj" />
+  <Project Path="src/PulsaSTT/PulsaSTT.csproj" />
+  <Project Path="src/PulsaLLM/PulsaLLM.csproj" />
+</Solution>
