@@ -17,8 +17,8 @@
     <PackageVersion Include="Serilog.Sinks.File" Version="7.0.0" />
 
     <!-- LMSupply -->
-    <PackageVersion Include="LMSupply.Generator" Version="0.20.1" />
-    <PackageVersion Include="LMSupply.Transcriber" Version="0.20.1" />
+    <PackageVersion Include="LMSupply.Generator" Version="0.20.2" />
+    <PackageVersion Include="LMSupply.Transcriber" Version="0.20.2" />
 
     <!-- AI / IndexThinking -->
     <PackageVersion Include="Microsoft.Extensions.AI.Abstractions" Version="10.3.0" />
