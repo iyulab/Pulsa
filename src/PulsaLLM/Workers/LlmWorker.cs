@@ -139,11 +139,19 @@ public class LlmWorker(
                     ex.Status, attempt + 1, MaxRetries, RetryDelays[attempt].TotalSeconds, filePath);
                 await Task.Delay(RetryDelays[attempt], ct);
             }
+            catch (ClientResultException ex)
+            {
+                var body = ex.GetRawResponse()?.Content?.ToString();
+                logger.LogError(
+                    "API error (HTTP {Status}): {Body} — {Path}",
+                    ex.Status, body ?? ex.Message, filePath);
+                throw;
+            }
         }
     }
 
     private static bool IsTransient(ClientResultException ex) =>
-        ex.Status is 400 or 408 or 429 or (>= 500 and <= 599);
+        ex.Status is 408 or 429 or (>= 500 and <= 599);
 
     // Fallback for thinking models that output untagged reasoning before
     // the actual structured content (e.g. "Okay, let me..." in English).
