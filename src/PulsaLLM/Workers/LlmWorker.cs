@@ -141,24 +141,33 @@ public class LlmWorker(
     private static bool IsTransient(ClientResultException ex) =>
         ex.Status is 400 or 408 or 429 or (>= 500 and <= 599);
 
-    // Pattern for markdown headings commonly used in structured output prompts.
     // Fallback for thinking models that output untagged reasoning before
     // the actual structured content (e.g. "Okay, let me..." in English).
     // Note: <think> tag stripping is handled by IndexThinking's ThinkingChatClient.
+
+    // Preferred: markdown headings like "### 1." or "## 1."
     private static readonly Regex MarkdownHeadingRegex = new(
-        @"^###?\s+\d+[\.\)]\s", RegexOptions.Multiline | RegexOptions.Compiled);
+        @"^#{1,3}\s+\d+[\.\)]\s", RegexOptions.Multiline | RegexOptions.Compiled);
+
+    // Fallback: plain numbered headings with Korean text (e.g. "1. 핵심 주제")
+    private static readonly Regex NumberedKoreanHeadingRegex = new(
+        @"^\d+[\.\)]\s+[\uAC00-\uD7A3\u3131-\u318E]",
+        RegexOptions.Multiline | RegexOptions.Compiled);
 
     private static string StripUntaggedThinking(string text)
     {
+        // Strategy 1: Find markdown headings (### 1., ## 1.)
         var match = MarkdownHeadingRegex.Match(text);
-        if (match.Success && match.Index > 0)
+        if (match.Success && match.Index > 100)
         {
-            // Only strip if there's substantial preamble before the heading
-            var preamble = text[..match.Index];
-            if (preamble.Length > 100)
-            {
-                text = text[match.Index..];
-            }
+            return text[match.Index..];
+        }
+
+        // Strategy 2: Find numbered headings with Korean text (1. 핵심)
+        match = NumberedKoreanHeadingRegex.Match(text);
+        if (match.Success && match.Index > 100)
+        {
+            return text[match.Index..];
         }
 
         return text;

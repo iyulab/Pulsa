@@ -53,6 +53,16 @@ if (File.Exists(promptPath))
     baseProviderOpts = PromptLoader.ApplyOverrides(baseProviderOpts, promptData.Frontmatter);
 }
 
+// Thinking models (e.g. Qwen3) require temperature > 0 for reasoning separation.
+// With temperature=0.0, enable_thinking is ignored and reasoning leaks into output text.
+if (baseProviderOpts.Model.Contains("thinking", StringComparison.OrdinalIgnoreCase)
+    && baseProviderOpts.Temperature is 0.0f)
+{
+    baseProviderOpts.Temperature = 0.6f;
+    Console.Error.WriteLine(
+        "[WRN] Thinking model with temperature=0.0 detected; adjusted to 0.6 for reasoning separation.");
+}
+
 // Make resolved provider options (with frontmatter overrides) available to workers
 builder.Services.AddSingleton(baseProviderOpts);
 
