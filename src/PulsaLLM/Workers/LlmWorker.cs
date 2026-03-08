@@ -140,6 +140,23 @@ public class LlmWorker(
     private static bool IsTransient(ClientResultException ex) =>
         ex.Status is 400 or 408 or 429 or (>= 500 and <= 599);
 
-    private static string StripThinkTags(string text) =>
-        string.IsNullOrEmpty(text) ? text : ThinkTagsRegex.Replace(text, "").Trim();
+    private static string StripThinkTags(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return text;
+
+        // Strip complete <think>...</think> blocks
+        text = ThinkTagsRegex.Replace(text, "");
+
+        // Handle orphaned </think> without matching <think>.
+        // Some OpenAI SDK adapters strip the opening <think> tag, leaving:
+        //   "thinking content</think>\n\nactual content"
+        while (true)
+        {
+            var endIdx = text.IndexOf("</think>", StringComparison.Ordinal);
+            if (endIdx < 0) break;
+            text = text[(endIdx + "</think>".Length)..];
+        }
+
+        return text.Trim();
+    }
 }

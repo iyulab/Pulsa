@@ -81,6 +81,12 @@ builder.Services.AddSingleton<IChatClient>(sp =>
                 MaxContinuations = 0,
                 MaxContextTokens = 32768,
             };
+            // Qwen3 thinking models on vLLM/GPUStack require enable_thinking: true
+            // to return reasoning in a separate reasoning_content field.
+            thinkingOpts.ReasoningRequestSettings = new()
+            {
+                UseAlternativeQwenField = true,
+            };
         })
         .Build(sp);
 });
