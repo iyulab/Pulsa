@@ -94,9 +94,14 @@ public class LlmWorker(
             };
 
             var maxTokens = providerOptions.MaxTokens;
-            var chatOptions = maxTokens > 0
-                ? new ChatOptions { MaxOutputTokens = maxTokens }
-                : null;
+            var temperature = providerOptions.Temperature;
+            ChatOptions? chatOptions = null;
+            if (maxTokens > 0 || temperature.HasValue)
+            {
+                chatOptions = new ChatOptions();
+                if (maxTokens > 0) chatOptions.MaxOutputTokens = maxTokens;
+                if (temperature.HasValue) chatOptions.Temperature = temperature.Value;
+            }
 
             var response = await CallWithRetryAsync(messages, chatOptions, filePath, ct);
             var result = StripThinkTags(response.Text ?? "");
@@ -157,6 +162,32 @@ public class LlmWorker(
             text = text[(endIdx + "</think>".Length)..];
         }
 
+        // Fallback: thinking models may output untagged reasoning before
+        // the actual structured content (e.g. "Okay, let me..." in English).
+        // Detect the first markdown heading that matches the expected output
+        // format and strip everything before it.
+        text = StripUntaggedThinking(text);
+
         return text.Trim();
+    }
+
+    // Pattern for markdown headings commonly used in structured output prompts
+    private static readonly Regex MarkdownHeadingRegex = new(
+        @"^###?\s+\d+[\.\)]\s", RegexOptions.Multiline | RegexOptions.Compiled);
+
+    private static string StripUntaggedThinking(string text)
+    {
+        var match = MarkdownHeadingRegex.Match(text);
+        if (match.Success && match.Index > 0)
+        {
+            // Only strip if there's substantial preamble before the heading
+            var preamble = text[..match.Index];
+            if (preamble.Length > 100)
+            {
+                text = text[match.Index..];
+            }
+        }
+
+        return text;
     }
 }

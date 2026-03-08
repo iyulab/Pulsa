@@ -75,4 +75,7 @@ public class ProviderOptions
 
     /// <summary>Max tokens for generation</summary>
     public int MaxTokens { get; set; } = 4096;
+
+    /// <summary>Temperature (0.0-2.0). Null to use provider default.</summary>
+    public float? Temperature { get; set; }
 }

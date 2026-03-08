@@ -65,6 +65,8 @@ public static class PromptLoader
             result.Host = host;
         if (frontmatter.TryGetValue("path_prefix", out var pathPrefix))
             result.PathPrefix = pathPrefix;
+        if (frontmatter.TryGetValue("temperature", out var temperature) && float.TryParse(temperature, out var temp))
+            result.Temperature = temp;
 
         return result;
     }
