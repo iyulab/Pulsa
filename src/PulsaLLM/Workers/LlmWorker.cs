@@ -141,9 +141,9 @@ public class LlmWorker(
     private static bool IsTransient(ClientResultException ex) =>
         ex.Status is 400 or 408 or 429 or (>= 500 and <= 599);
 
-    // Fallback for thinking models that output untagged reasoning before
-    // the actual structured content (e.g. "Okay, let me..." in English).
-    // Note: <think> tag stripping is handled by IndexThinking's ThinkingChatClient.
+    // Strips reasoning/thinking content that leaks into the response text.
+    // Thinking models (Qwen3, DeepSeek-R1) may embed reasoning in the content
+    // when the server doesn't support reasoning_content field separation.
 
     // Preferred: markdown headings like "### 1." or "## 1."
     private static readonly Regex MarkdownHeadingRegex = new(
@@ -156,6 +156,12 @@ public class LlmWorker(
 
     private static string StripUntaggedThinking(string text)
     {
+        // Strategy 0: Strip <think>...</think> blocks and orphaned </think> tags.
+        // IndexThinking extracts ThinkingContent but does NOT strip from response.Text.
+        // When server doesn't return reasoning_content separately, the model embeds
+        // reasoning in content as: "reasoning text</think>\n\nactual answer"
+        text = StripThinkTags(text);
+
         // Strategy 1: Find markdown headings (### 1., ## 1.)
         var match = MarkdownHeadingRegex.Match(text);
         if (match.Success && match.Index > 100)
@@ -171,5 +177,26 @@ public class LlmWorker(
         }
 
         return text;
+    }
+
+    private static readonly Regex ThinkTagBlockRegex = new(
+        @"<think>.*?</think>", RegexOptions.Singleline | RegexOptions.Compiled);
+
+    private static string StripThinkTags(string text)
+    {
+        // Strip complete <think>...</think> blocks
+        text = ThinkTagBlockRegex.Replace(text, "");
+
+        // Handle orphaned </think> without matching <think>.
+        // Some servers/SDKs strip the opening <think> tag, producing:
+        //   "thinking content</think>\n\nactual content"
+        while (true)
+        {
+            var endIdx = text.IndexOf("</think>", StringComparison.Ordinal);
+            if (endIdx < 0) break;
+            text = text[(endIdx + "</think>".Length)..];
+        }
+
+        return text.Trim();
     }
 }
