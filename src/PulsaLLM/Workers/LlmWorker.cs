@@ -1,3 +1,4 @@
+using System.ClientModel;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Options;
 using Pulsa;
@@ -10,6 +11,10 @@ public class LlmWorker(
     IChatClient chatClient,
     ILogger<LlmWorker> logger) : BackgroundService
 {
+    private const int MaxRetries = 3;
+    private static readonly TimeSpan[] RetryDelays =
+        [TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(15)];
+
     protected override Task ExecuteAsync(CancellationToken stoppingToken)
         => Task.Factory.StartNew(
             () => RunAsync(stoppingToken),
@@ -82,7 +87,7 @@ public class LlmWorker(
                 new(ChatRole.User, content),
             };
 
-            var response = await chatClient.GetResponseAsync(messages, cancellationToken: ct);
+            var response = await CallWithRetryAsync(messages, filePath, ct);
             var result = response.Text ?? "";
 
             await File.WriteAllTextAsync(tempPath, result, ct);
@@ -101,4 +106,26 @@ public class LlmWorker(
             FileHelper.TryDelete(tempPath);
         }
     }
+
+    private async Task<ChatResponse> CallWithRetryAsync(
+        List<ChatMessage> messages, string filePath, CancellationToken ct)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                return await chatClient.GetResponseAsync(messages, cancellationToken: ct);
+            }
+            catch (ClientResultException ex) when (attempt < MaxRetries && IsTransient(ex))
+            {
+                logger.LogWarning(
+                    "Transient error (HTTP {Status}), retry {Attempt}/{Max} after {Delay}s: {Path}",
+                    ex.Status, attempt + 1, MaxRetries, RetryDelays[attempt].TotalSeconds, filePath);
+                await Task.Delay(RetryDelays[attempt], ct);
+            }
+        }
+    }
+
+    private static bool IsTransient(ClientResultException ex) =>
+        ex.Status is 400 or 408 or 429 or (>= 500 and <= 599);
 }
