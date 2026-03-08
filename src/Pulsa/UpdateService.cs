@@ -134,10 +134,21 @@ public class UpdateService(
             return await http.GetFromJsonAsync<GitHubRelease>(url, ct);
         }
 
+        // GitHub API does not guarantee release order — find the highest version.
         var listUrl = $"https://api.github.com/repos/{opts.Repository}/releases?per_page=30";
         var releases = await http.GetFromJsonAsync<List<GitHubRelease>>(listUrl, ct);
-        return releases?.FirstOrDefault(r =>
-            r.TagName.StartsWith(opts.TagPrefix, StringComparison.OrdinalIgnoreCase));
+        return releases?
+            .Where(r => r.TagName.StartsWith(opts.TagPrefix, StringComparison.OrdinalIgnoreCase))
+            .Select(r =>
+            {
+                var versionStr = r.TagName[opts.TagPrefix.Length..].TrimStart('v');
+                Version.TryParse(versionStr, out var version);
+                return (Release: r, Version: version);
+            })
+            .Where(x => x.Version is not null)
+            .OrderByDescending(x => x.Version)
+            .Select(x => x.Release)
+            .FirstOrDefault();
     }
 }
 
