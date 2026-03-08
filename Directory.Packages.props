@@ -24,7 +24,7 @@
     <PackageVersion Include="Microsoft.Extensions.AI.Abstractions" Version="10.3.0" />
     <PackageVersion Include="Microsoft.Extensions.AI" Version="10.3.0" />
     <PackageVersion Include="Microsoft.Extensions.AI.OpenAI" Version="10.3.0" />
-    <PackageVersion Include="IndexThinking" Version="0.17.4" />
+    <PackageVersion Include="IndexThinking" Version="0.18.0" />
 
     <!-- Others -->
     <PackageVersion Include="FFMpegCore" Version="5.4.0" />

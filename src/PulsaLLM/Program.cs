@@ -71,6 +71,10 @@ builder.Services.AddSingleton<IChatClient>(sp =>
             thinkingOpts.EnableReasoning = true;
             thinkingOpts.EnableContextTracking = false;
             thinkingOpts.EnableContextInjection = false;
+            thinkingOpts.DefaultContinuation = new()
+            {
+                MaxContextTokens = 32768,
+            };
         })
         .Build(sp);
 });
