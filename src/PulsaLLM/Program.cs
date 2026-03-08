@@ -86,10 +86,11 @@ builder.Services.AddSingleton<IChatClient>(sp =>
             thinkingOpts.EnableContextInjection = false;
             thinkingOpts.DefaultContinuation = new()
             {
-                // Disable continuation — thinking models leak reasoning
-                // into continuation responses, polluting the output.
-                MaxContinuations = 0,
-                MaxContextTokens = 32768,
+                // Auto-cap prevents HTTP 400; reasoning is disabled on
+                // continuation requests so thinking content won't leak.
+                MaxContinuations = 3,
+                // Use model's actual context window for auto-cap
+                MaxContextTokens = opts.ContextWindow > 0 ? opts.ContextWindow : null,
             };
             // Qwen3 thinking models on vLLM/GPUStack require enable_thinking: true
             // to return reasoning in a separate reasoning_content field.

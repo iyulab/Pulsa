@@ -57,6 +57,8 @@ public static class PromptLoader
             result.Model = model;
         if (frontmatter.TryGetValue("max_tokens", out var maxTokens) && int.TryParse(maxTokens, out var mt))
             result.MaxTokens = mt;
+        if (frontmatter.TryGetValue("context_window", out var contextWindow) && int.TryParse(contextWindow, out var cw))
+            result.ContextWindow = cw;
         if (frontmatter.TryGetValue("provider", out var providerType))
             result.Type = providerType;
         if (frontmatter.TryGetValue("api_key", out var apiKey))

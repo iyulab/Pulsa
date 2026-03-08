@@ -76,6 +76,9 @@ public class ProviderOptions
     /// <summary>Max tokens for generation. 0 = let the server auto-calculate.</summary>
     public int MaxTokens { get; set; }
 
+    /// <summary>Model context window size. Used to auto-cap max_tokens. 0 = no cap.</summary>
+    public int ContextWindow { get; set; }
+
     /// <summary>Temperature (0.0-2.0). Null to use provider default.</summary>
     public float? Temperature { get; set; }
 }

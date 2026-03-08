@@ -123,6 +123,11 @@ public class LlmWorker(
         }
     }
 
+    // Regex to parse "maximum context length is X tokens ... Y input tokens" from API error
+    private static readonly Regex ContextLimitRegex = new(
+        @"maximum context length is (\d+) tokens.*?(\d+) input tokens",
+        RegexOptions.Compiled);
+
     private async Task<ChatResponse> CallWithRetryAsync(
         List<ChatMessage> messages, ChatOptions? chatOptions, string filePath, CancellationToken ct)
     {
@@ -130,6 +135,17 @@ public class LlmWorker(
         {
             try
             {
+                return await chatClient.GetResponseAsync(messages, chatOptions, ct);
+            }
+            catch (ClientResultException ex) when (ex.Status == 400
+                && TryExtractAvailableTokens(ex, out var availableTokens))
+            {
+                // max_tokens exceeds available context — cap and retry once
+                chatOptions ??= new ChatOptions();
+                chatOptions.MaxOutputTokens = availableTokens;
+                logger.LogWarning(
+                    "max_tokens exceeded context limit, retrying with {MaxTokens}: {Path}",
+                    availableTokens, filePath);
                 return await chatClient.GetResponseAsync(messages, chatOptions, ct);
             }
             catch (ClientResultException ex) when (attempt < MaxRetries && IsTransient(ex))
@@ -148,6 +164,24 @@ public class LlmWorker(
                 throw;
             }
         }
+    }
+
+    private static bool TryExtractAvailableTokens(ClientResultException ex, out int availableTokens)
+    {
+        availableTokens = 0;
+        var body = ex.GetRawResponse()?.Content?.ToString();
+        if (body is null) return false;
+
+        var match = ContextLimitRegex.Match(body);
+        if (!match.Success) return false;
+
+        if (int.TryParse(match.Groups[1].Value, out var contextLength)
+            && int.TryParse(match.Groups[2].Value, out var inputTokens))
+        {
+            availableTokens = contextLength - inputTokens;
+            return availableTokens > 0;
+        }
+        return false;
     }
 
     private static bool IsTransient(ClientResultException ex) =>
