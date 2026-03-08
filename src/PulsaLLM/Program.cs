@@ -53,6 +53,9 @@ if (File.Exists(promptPath))
     baseProviderOpts = PromptLoader.ApplyOverrides(baseProviderOpts, promptData.Frontmatter);
 }
 
+// Make resolved provider options (with frontmatter overrides) available to workers
+builder.Services.AddSingleton(baseProviderOpts);
+
 // Register IChatClient with IndexThinking pipeline
 builder.Services.AddSingleton<IChatClient>(sp =>
 {
@@ -73,6 +76,9 @@ builder.Services.AddSingleton<IChatClient>(sp =>
             thinkingOpts.EnableContextInjection = false;
             thinkingOpts.DefaultContinuation = new()
             {
+                // Disable continuation — thinking models leak reasoning
+                // into continuation responses, polluting the output.
+                MaxContinuations = 0,
                 MaxContextTokens = 32768,
             };
         })

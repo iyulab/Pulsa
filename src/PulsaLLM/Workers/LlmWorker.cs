@@ -1,4 +1,5 @@
 using System.ClientModel;
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Options;
 using Pulsa;
@@ -8,12 +9,17 @@ namespace PulsaLLM.Workers;
 public class LlmWorker(
     FileQueue queue,
     IOptions<LlmOptions> options,
+    ProviderOptions providerOptions,
     IChatClient chatClient,
     ILogger<LlmWorker> logger) : BackgroundService
 {
     private const int MaxRetries = 3;
     private static readonly TimeSpan[] RetryDelays =
         [TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(15)];
+
+    // Strip <think>...</think> tags from thinking models (e.g. Qwen3, DeepSeek)
+    private static readonly Regex ThinkTagsRegex = new(
+        @"<think>[\s\S]*?</think>", RegexOptions.Compiled);
 
     protected override Task ExecuteAsync(CancellationToken stoppingToken)
         => Task.Factory.StartNew(
@@ -87,8 +93,13 @@ public class LlmWorker(
                 new(ChatRole.User, content),
             };
 
-            var response = await CallWithRetryAsync(messages, filePath, ct);
-            var result = response.Text ?? "";
+            var maxTokens = providerOptions.MaxTokens;
+            var chatOptions = maxTokens > 0
+                ? new ChatOptions { MaxOutputTokens = maxTokens }
+                : null;
+
+            var response = await CallWithRetryAsync(messages, chatOptions, filePath, ct);
+            var result = StripThinkTags(response.Text ?? "");
 
             await File.WriteAllTextAsync(tempPath, result, ct);
             File.Move(tempPath, outputPath, overwrite: false);
@@ -108,13 +119,13 @@ public class LlmWorker(
     }
 
     private async Task<ChatResponse> CallWithRetryAsync(
-        List<ChatMessage> messages, string filePath, CancellationToken ct)
+        List<ChatMessage> messages, ChatOptions? chatOptions, string filePath, CancellationToken ct)
     {
         for (var attempt = 0; ; attempt++)
         {
             try
             {
-                return await chatClient.GetResponseAsync(messages, cancellationToken: ct);
+                return await chatClient.GetResponseAsync(messages, chatOptions, ct);
             }
             catch (ClientResultException ex) when (attempt < MaxRetries && IsTransient(ex))
             {
@@ -128,4 +139,7 @@ public class LlmWorker(
 
     private static bool IsTransient(ClientResultException ex) =>
         ex.Status is 400 or 408 or 429 or (>= 500 and <= 599);
+
+    private static string StripThinkTags(string text) =>
+        string.IsNullOrEmpty(text) ? text : ThinkTagsRegex.Replace(text, "").Trim();
 }
