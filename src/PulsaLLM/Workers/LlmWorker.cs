@@ -17,10 +17,6 @@ public class LlmWorker(
     private static readonly TimeSpan[] RetryDelays =
         [TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(15)];
 
-    // Strip <think>...</think> tags from thinking models (e.g. Qwen3, DeepSeek)
-    private static readonly Regex ThinkTagsRegex = new(
-        @"<think>[\s\S]*?</think>", RegexOptions.Compiled);
-
     protected override Task ExecuteAsync(CancellationToken stoppingToken)
         => Task.Factory.StartNew(
             () => RunAsync(stoppingToken),
@@ -104,7 +100,7 @@ public class LlmWorker(
             }
 
             var response = await CallWithRetryAsync(messages, chatOptions, filePath, ct);
-            var result = StripThinkTags(response.Text ?? "");
+            var result = StripUntaggedThinking(response.Text ?? "").Trim();
 
             await File.WriteAllTextAsync(tempPath, result, ct);
             File.Move(tempPath, outputPath, overwrite: false);
@@ -145,33 +141,10 @@ public class LlmWorker(
     private static bool IsTransient(ClientResultException ex) =>
         ex.Status is 400 or 408 or 429 or (>= 500 and <= 599);
 
-    private static string StripThinkTags(string text)
-    {
-        if (string.IsNullOrEmpty(text)) return text;
-
-        // Strip complete <think>...</think> blocks
-        text = ThinkTagsRegex.Replace(text, "");
-
-        // Handle orphaned </think> without matching <think>.
-        // Some OpenAI SDK adapters strip the opening <think> tag, leaving:
-        //   "thinking content</think>\n\nactual content"
-        while (true)
-        {
-            var endIdx = text.IndexOf("</think>", StringComparison.Ordinal);
-            if (endIdx < 0) break;
-            text = text[(endIdx + "</think>".Length)..];
-        }
-
-        // Fallback: thinking models may output untagged reasoning before
-        // the actual structured content (e.g. "Okay, let me..." in English).
-        // Detect the first markdown heading that matches the expected output
-        // format and strip everything before it.
-        text = StripUntaggedThinking(text);
-
-        return text.Trim();
-    }
-
-    // Pattern for markdown headings commonly used in structured output prompts
+    // Pattern for markdown headings commonly used in structured output prompts.
+    // Fallback for thinking models that output untagged reasoning before
+    // the actual structured content (e.g. "Okay, let me..." in English).
+    // Note: <think> tag stripping is handled by IndexThinking's ThinkingChatClient.
     private static readonly Regex MarkdownHeadingRegex = new(
         @"^###?\s+\d+[\.\)]\s", RegexOptions.Multiline | RegexOptions.Compiled);
 
