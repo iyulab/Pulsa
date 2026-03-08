@@ -3,6 +3,7 @@ name: Release PulsaSTT
 on:
   push:
     tags: ['stt-v*']
+  workflow_call:
   workflow_dispatch:
 
 jobs:

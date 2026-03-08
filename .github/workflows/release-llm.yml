@@ -3,6 +3,7 @@ name: Release PulsaLLM
 on:
   push:
     tags: ['llm-v*']
+  workflow_call:
   workflow_dispatch:
 
 jobs:

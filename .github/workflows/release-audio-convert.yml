@@ -3,6 +3,7 @@ name: Release PulsaAudioConvert
 on:
   push:
     tags: ['audio-convert-v*']
+  workflow_call:
   workflow_dispatch:
 
 jobs:

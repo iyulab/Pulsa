@@ -6,53 +6,103 @@ on:
     paths: ['src/**/*.csproj']
 
 jobs:
-  auto-tag:
+  detect-changes:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    strategy:
-      matrix:
-        include:
-          - project: src/PulsaSTT/PulsaSTT.csproj
-            prefix: stt-v
-            workflow: release-stt.yml
-          - project: src/PulsaLLM/PulsaLLM.csproj
-            prefix: llm-v
-            workflow: release-llm.yml
-          - project: src/PulsaAudioConvert/PulsaAudioConvert.csproj
-            prefix: audio-convert-v
-            workflow: release-audio-convert.yml
+    outputs:
+      stt-changed: ${{ steps.stt.outputs.changed }}
+      llm-changed: ${{ steps.llm.outputs.changed }}
+      audio-changed: ${{ steps.audio.outputs.changed }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 2
 
-      - name: Check version change
-        id: check
+      - name: Check PulsaSTT
+        id: stt
         shell: bash
         run: |
-          if ! git diff HEAD~1 HEAD --name-only | grep -q "${{ matrix.project }}"; then
+          if ! git diff HEAD~1 HEAD --name-only | grep -q "src/PulsaSTT/PulsaSTT.csproj"; then
             echo "changed=false" >> $GITHUB_OUTPUT
             exit 0
           fi
-          version=$(grep -oP '(?<=<Version>)[^<]+' "${{ matrix.project }}")
-          tag="${{ matrix.prefix }}${version}"
+          version=$(sed -n 's/.*<Version>\([^<]*\)<.*/\1/p' src/PulsaSTT/PulsaSTT.csproj)
+          tag="stt-v${version}"
           if git ls-remote --tags origin "refs/tags/${tag}" | grep -q "${tag}"; then
             echo "changed=false" >> $GITHUB_OUTPUT
           else
             echo "changed=true" >> $GITHUB_OUTPUT
             echo "tag=${tag}" >> $GITHUB_OUTPUT
-            echo "version=${version}" >> $GITHUB_OUTPUT
           fi
 
-      - name: Create tag
-        if: steps.check.outputs.changed == 'true'
+      - name: Check PulsaLLM
+        id: llm
+        shell: bash
         run: |
-          git tag ${{ steps.check.outputs.tag }}
-          git push origin ${{ steps.check.outputs.tag }}
+          if ! git diff HEAD~1 HEAD --name-only | grep -q "src/PulsaLLM/PulsaLLM.csproj"; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          version=$(sed -n 's/.*<Version>\([^<]*\)<.*/\1/p' src/PulsaLLM/PulsaLLM.csproj)
+          tag="llm-v${version}"
+          if git ls-remote --tags origin "refs/tags/${tag}" | grep -q "${tag}"; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "tag=${tag}" >> $GITHUB_OUTPUT
+          fi
 
-      - name: Trigger release
-        if: steps.check.outputs.changed == 'true'
-        run: gh workflow run ${{ matrix.workflow }}
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Check PulsaAudioConvert
+        id: audio
+        shell: bash
+        run: |
+          if ! git diff HEAD~1 HEAD --name-only | grep -q "src/PulsaAudioConvert/PulsaAudioConvert.csproj"; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          version=$(sed -n 's/.*<Version>\([^<]*\)<.*/\1/p' src/PulsaAudioConvert/PulsaAudioConvert.csproj)
+          tag="audio-convert-v${version}"
+          if git ls-remote --tags origin "refs/tags/${tag}" | grep -q "${tag}"; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "tag=${tag}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create tags
+        shell: bash
+        run: |
+          if [ "${{ steps.stt.outputs.changed }}" == "true" ]; then
+            git tag ${{ steps.stt.outputs.tag }}
+            git push origin ${{ steps.stt.outputs.tag }}
+          fi
+          if [ "${{ steps.llm.outputs.changed }}" == "true" ]; then
+            git tag ${{ steps.llm.outputs.tag }}
+            git push origin ${{ steps.llm.outputs.tag }}
+          fi
+          if [ "${{ steps.audio.outputs.changed }}" == "true" ]; then
+            git tag ${{ steps.audio.outputs.tag }}
+            git push origin ${{ steps.audio.outputs.tag }}
+          fi
+
+  release-stt:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.stt-changed == 'true'
+    uses: ./.github/workflows/release-stt.yml
+    permissions:
+      contents: write
+
+  release-llm:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.llm-changed == 'true'
+    uses: ./.github/workflows/release-llm.yml
+    permissions:
+      contents: write
+
+  release-audio:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.audio-changed == 'true'
+    uses: ./.github/workflows/release-audio-convert.yml
+    permissions:
+      contents: write
