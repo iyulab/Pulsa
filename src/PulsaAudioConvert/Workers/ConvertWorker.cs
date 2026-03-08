@@ -47,7 +47,8 @@ public class ConvertWorker(
         if (!await FileHelper.WaitUntilReadyAsync(filePath, opts.FileReadyRetries, opts.FileReadyRetryDelayMs, logger, ct))
             return;
 
-        var tempPath = outputPath + ".tmp";
+        var dir = Path.GetDirectoryName(outputPath)!;
+        var tempPath = Path.Combine(dir, $".~tmp_{Path.GetFileName(outputPath)}");
         logger.LogInformation("Converting: {Source} → {Dest}", filePath, outputPath);
         try
         {
