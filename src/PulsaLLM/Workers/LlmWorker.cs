@@ -130,7 +130,16 @@ public class LlmWorker(
             }
 
             var response = await CallWithRetryAsync(messages, chatOptions, filePath, ct);
-            var result = StripLeadingThinking(response.Text ?? "").Trim();
+            var result = (response.Text ?? "").Trim();
+            result = TrimDuplicateSections(result);
+
+            if (result.Length == 0 || !SectionHeadingRegex.IsMatch(result))
+            {
+                logger.LogWarning(
+                    "LLM returned no usable content (length={Length}, hasHeadings={HasHeadings}) — skipping: {Path}",
+                    result.Length, SectionHeadingRegex.IsMatch(result), filePath);
+                return;
+            }
 
             await File.WriteAllTextAsync(tempPath, result, ct);
             File.Move(tempPath, outputPath, overwrite: false);
@@ -250,36 +259,77 @@ public class LlmWorker(
     private static bool IsTransient(ClientResultException ex) =>
         ex.Status is 408 or 429 or (>= 500 and <= 599);
 
-    // App-specific fallback: detect leading untagged thinking by finding the first
-    // structured heading in the output. This relies on knowledge of the prompt format
-    // (markdown headings or numbered Korean headings) and does NOT belong in IndexThinking.
-    // Think tag stripping and trailing reasoning stripping are handled by IndexThinking.
+    // Regex to detect numbered markdown headings like "### 1." or "### 2."
+    private static readonly Regex SectionHeadingRegex = new(
+        @"^###\s+(\d+)\.", RegexOptions.Compiled | RegexOptions.Multiline);
 
-    // Preferred: markdown headings like "### 1." or "## 1."
-    private static readonly Regex MarkdownHeadingRegex = new(
-        @"^#{1,3}\s+\d+[\.\)]\s", RegexOptions.Multiline | RegexOptions.Compiled);
-
-    // Fallback: plain numbered headings with Korean text (e.g. "1. 핵심 주제")
-    private static readonly Regex NumberedKoreanHeadingRegex = new(
-        @"^\d+[\.\)]\s+[\uAC00-\uD7A3\u3131-\u318E]",
-        RegexOptions.Multiline | RegexOptions.Compiled);
-
-    private static string StripLeadingThinking(string text)
+    /// <summary>
+    /// Detects duplicate numbered sections (e.g. "### 3." appearing twice) caused by
+    /// continuation overlap and truncates at the first repeated heading.
+    /// Also trims trailing non-CJK content after the last section (reasoning noise).
+    /// </summary>
+    internal static string TrimDuplicateSections(string text)
     {
-        // If structured content starts after >100 chars of preamble,
-        // the preamble is likely untagged thinking. Strip it.
-        var match = MarkdownHeadingRegex.Match(text);
-        if (match.Success && match.Index > 100)
+        if (string.IsNullOrEmpty(text)) return text;
+
+        var seen = new HashSet<string>();
+        var lastSectionEnd = -1;
+        foreach (Match match in SectionHeadingRegex.Matches(text))
         {
-            return text[match.Index..];
+            var sectionNum = match.Groups[1].Value;
+            if (!seen.Add(sectionNum))
+            {
+                // Found a duplicate — truncate at this position
+                return text[..match.Index].TrimEnd();
+            }
+            lastSectionEnd = match.Index;
         }
 
-        match = NumberedKoreanHeadingRegex.Match(text);
-        if (match.Success && match.Index > 100)
+        // Trim trailing non-CJK noise after the last section block
+        if (lastSectionEnd >= 0)
         {
-            return text[match.Index..];
+            text = TrimTrailingNonCjk(text);
         }
 
         return text;
+    }
+
+    /// <summary>
+    /// Scans backwards from the end of text; if trailing paragraphs contain no CJK
+    /// characters (e.g. leaked English reasoning), trims them.
+    /// </summary>
+    private static string TrimTrailingNonCjk(string text)
+    {
+        // Find the last blank-line boundary
+        var searchFrom = text.Length;
+        while (true)
+        {
+            var blankLine = text.LastIndexOf("\n\n", searchFrom - 1, StringComparison.Ordinal);
+            if (blankLine < 0 || blankLine < text.Length / 2) break;
+
+            var trailing = text[(blankLine + 2)..];
+            if (trailing.Length < 10) break;
+
+            if (HasAnyCjk(trailing)) break;
+
+            // Trailing block has no CJK — remove it
+            text = text[..blankLine].TrimEnd();
+            searchFrom = text.Length;
+        }
+
+        return text;
+    }
+
+    private static bool HasAnyCjk(string text)
+    {
+        foreach (var c in text)
+        {
+            if (c is (>= '\uAC00' and <= '\uD7A3')   // Korean Hangul
+                  or (>= '\u3131' and <= '\u318E')     // Korean Jamo
+                  or (>= '\u4E00' and <= '\u9FFF')     // CJK Ideographs
+                  or (>= '\u3040' and <= '\u30FF'))     // Hiragana/Katakana
+                return true;
+        }
+        return false;
     }
 }

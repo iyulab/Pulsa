@@ -17,14 +17,14 @@
     <PackageVersion Include="Serilog.Sinks.File" Version="7.0.0" />
 
     <!-- LMSupply -->
-    <PackageVersion Include="LMSupply.Generator" Version="0.20.2" />
-    <PackageVersion Include="LMSupply.Transcriber" Version="0.20.2" />
+    <PackageVersion Include="LMSupply.Generator" Version="0.24.0" />
+    <PackageVersion Include="LMSupply.Transcriber" Version="0.24.0" />
 
     <!-- AI / IndexThinking -->
     <PackageVersion Include="Microsoft.Extensions.AI.Abstractions" Version="10.3.0" />
     <PackageVersion Include="Microsoft.Extensions.AI" Version="10.3.0" />
     <PackageVersion Include="Microsoft.Extensions.AI.OpenAI" Version="10.3.0" />
-    <PackageVersion Include="IndexThinking" Version="0.18.5" />
+    <PackageVersion Include="IndexThinking" Version="0.19.1" />
 
     <!-- Token counting -->
     <PackageVersion Include="TokenMeter" Version="0.3.1" />
