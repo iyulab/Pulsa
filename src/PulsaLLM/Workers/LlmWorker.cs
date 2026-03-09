@@ -3,6 +3,7 @@ using System.Text.RegularExpressions;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Options;
 using Pulsa;
+using TokenMeter;
 
 namespace PulsaLLM.Workers;
 
@@ -11,6 +12,7 @@ public class LlmWorker(
     IOptions<LlmOptions> options,
     ProviderOptions providerOptions,
     IChatClient chatClient,
+    ITokenCounter tokenCounter,
     ILogger<LlmWorker> logger) : BackgroundService
 {
     private const int MaxRetries = 3;
@@ -83,6 +85,30 @@ public class LlmWorker(
         {
             var content = await File.ReadAllTextAsync(filePath, ct);
 
+            // Proactive truncation: if context window is known, trim input before calling API
+            var contextWindow = providerOptions.ContextWindow;
+            if (contextWindow > 0)
+            {
+                var outputReserve = providerOptions.MaxTokens > 0 ? providerOptions.MaxTokens : 1024;
+                var inputBudget = contextWindow - outputReserve;
+                var systemTokens = tokenCounter.CountTokens(systemPrompt);
+                var userBudget = inputBudget - systemTokens - 64; // margin
+
+                if (userBudget > 0)
+                {
+                    var userTokens = tokenCounter.CountTokens(content);
+                    if (userTokens > userBudget)
+                    {
+                        var keepRatio = (double)userBudget / userTokens;
+                        var maxChars = (int)(content.Length * keepRatio);
+                        content = content[..maxChars];
+                        logger.LogWarning(
+                            "Input truncated to fit context ({UserTokens}→~{Budget} tokens, {Percent:F0}%): {Path}",
+                            userTokens, userBudget, keepRatio * 100, filePath);
+                    }
+                }
+            }
+
             var messages = new List<ChatMessage>
             {
                 new(ChatRole.System, systemPrompt),
@@ -138,14 +164,54 @@ public class LlmWorker(
                 return await chatClient.GetResponseAsync(messages, chatOptions, ct);
             }
             catch (ClientResultException ex) when (ex.Status == 400
-                && TryExtractAvailableTokens(ex, out var availableTokens))
+                && TryExtractContextInfo(ex, out var contextLength, out var inputTokens))
             {
-                // max_tokens exceeds available context — cap and retry once
-                chatOptions ??= new ChatOptions();
-                chatOptions.MaxOutputTokens = availableTokens;
+                var available = contextLength - inputTokens;
+                if (available > 0)
+                {
+                    // max_tokens exceeds available context — cap and retry once
+                    chatOptions ??= new ChatOptions();
+                    chatOptions.MaxOutputTokens = available;
+                    logger.LogWarning(
+                        "max_tokens exceeded context limit, retrying with {MaxTokens}: {Path}",
+                        available, filePath);
+                    return await chatClient.GetResponseAsync(messages, chatOptions, ct);
+                }
+
+                // Input itself exceeds context window — truncate user content and retry
+                var userMsg = messages.LastOrDefault(m => m.Role == ChatRole.User);
+                if (userMsg is null) throw;
+
+                var userText = userMsg.Text ?? "";
+                if (userText.Length == 0) throw;
+
+                // Use the API's own token count to derive the actual chars/token ratio
+                // for this model, then calculate how much user text to keep.
+                var outputReserve = chatOptions?.MaxOutputTokens ?? 1024;
+                var targetInputTokens = contextLength - outputReserve;
+                // Estimate system prompt tokens proportionally from total input
+                var systemText = messages.FirstOrDefault(m => m.Role == ChatRole.System)?.Text ?? "";
+                var totalChars = systemText.Length + userText.Length;
+                var systemTokenEstimate = totalChars > 0
+                    ? (int)((long)inputTokens * systemText.Length / totalChars)
+                    : 0;
+                var userTokenBudget = targetInputTokens - systemTokenEstimate - 64; // margin
+                if (userTokenBudget < 100) throw; // too small to be useful
+
+                // Derive ratio from actual API token count (model-agnostic)
+                var currentUserTokens = inputTokens - systemTokenEstimate;
+                if (currentUserTokens <= 0) throw;
+                var keepRatio = (double)userTokenBudget / currentUserTokens;
+                var maxChars = (int)(userText.Length * keepRatio);
+                if (maxChars <= 0 || maxChars >= userText.Length) throw;
+
+                var truncated = userText[..maxChars];
+                messages[messages.Count - 1] = new ChatMessage(ChatRole.User, truncated);
+
                 logger.LogWarning(
-                    "max_tokens exceeded context limit, retrying with {MaxTokens}: {Path}",
-                    availableTokens, filePath);
+                    "Input ({InputTokens} tokens) exceeds context ({ContextLength}), " +
+                    "truncated to {KeepPercent:F0}% (~{MaxChars} chars): {Path}",
+                    inputTokens, contextLength, keepRatio * 100, maxChars, filePath);
                 return await chatClient.GetResponseAsync(messages, chatOptions, ct);
             }
             catch (ClientResultException ex) when (attempt < MaxRetries && IsTransient(ex))
@@ -166,22 +232,19 @@ public class LlmWorker(
         }
     }
 
-    private static bool TryExtractAvailableTokens(ClientResultException ex, out int availableTokens)
+    private static bool TryExtractContextInfo(
+        ClientResultException ex, out int contextLength, out int inputTokens)
     {
-        availableTokens = 0;
+        contextLength = 0;
+        inputTokens = 0;
         var body = ex.GetRawResponse()?.Content?.ToString();
         if (body is null) return false;
 
         var match = ContextLimitRegex.Match(body);
         if (!match.Success) return false;
 
-        if (int.TryParse(match.Groups[1].Value, out var contextLength)
-            && int.TryParse(match.Groups[2].Value, out var inputTokens))
-        {
-            availableTokens = contextLength - inputTokens;
-            return availableTokens > 0;
-        }
-        return false;
+        return int.TryParse(match.Groups[1].Value, out contextLength)
+            && int.TryParse(match.Groups[2].Value, out inputTokens);
     }
 
     private static bool IsTransient(ClientResultException ex) =>

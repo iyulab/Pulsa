@@ -8,6 +8,7 @@ using PulsaLLM;
 using PulsaLLM.Workers;
 using System.Text;
 using Serilog;
+using TokenMeter;
 
 Console.OutputEncoding = Encoding.UTF8;
 
@@ -65,6 +66,9 @@ if (baseProviderOpts.Model.Contains("thinking", StringComparison.OrdinalIgnoreCa
 
 // Make resolved provider options (with frontmatter overrides) available to workers
 builder.Services.AddSingleton(baseProviderOpts);
+
+// Token counter for proactive input truncation
+builder.Services.AddSingleton<ITokenCounter>(TokenCounter.Default());
 
 // Register IChatClient with IndexThinking pipeline
 builder.Services.AddSingleton<IChatClient>(sp =>
