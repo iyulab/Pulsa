@@ -104,7 +104,7 @@ public class LlmWorker(
             }
 
             var response = await CallWithRetryAsync(messages, chatOptions, filePath, ct);
-            var result = StripUntaggedThinking(response.Text ?? "").Trim();
+            var result = StripLeadingThinking(response.Text ?? "").Trim();
 
             await File.WriteAllTextAsync(tempPath, result, ct);
             File.Move(tempPath, outputPath, overwrite: false);
@@ -187,13 +187,10 @@ public class LlmWorker(
     private static bool IsTransient(ClientResultException ex) =>
         ex.Status is 408 or 429 or (>= 500 and <= 599);
 
-    // Fallback for thinking models that output untagged reasoning before/after
-    // the actual structured content (e.g. "Okay, let me..." in English).
-    // Note: <think> tag stripping is handled by IndexThinking's
-    // DefaultThinkingTurnManager.StripThinkTagsFromResponse().
-    // This fallback handles edge cases:
-    // 1. max_tokens exhausted before </think>, leaving raw reasoning without tags
-    // 2. Continuation fragments containing untagged inline reasoning
+    // App-specific fallback: detect leading untagged thinking by finding the first
+    // structured heading in the output. This relies on knowledge of the prompt format
+    // (markdown headings or numbered Korean headings) and does NOT belong in IndexThinking.
+    // Think tag stripping and trailing reasoning stripping are handled by IndexThinking.
 
     // Preferred: markdown headings like "### 1." or "## 1."
     private static readonly Regex MarkdownHeadingRegex = new(
@@ -204,46 +201,20 @@ public class LlmWorker(
         @"^\d+[\.\)]\s+[\uAC00-\uD7A3\u3131-\u318E]",
         RegexOptions.Multiline | RegexOptions.Compiled);
 
-    // Trailing reasoning: blank line followed by English reasoning starters.
-    // These are continuation artifacts where the model responds to the
-    // continuation prompt with its reasoning instead of actual content.
-    private static readonly Regex TrailingReasoningRegex = new(
-        @"\n[ \t]*\n(?=(?:Okay|Wait|Let me|Looking|The user|However|But (?:in|the|looking|according|since|this)|So (?:the|this|we|I)|Given|Therefore|This (?:is|suggests|means|implies|was)|I need|I should|Now (?:I|let|,)|First,|In the|Based on|Hmm|Actually|I (?:see|think|notice))\b)",
-        RegexOptions.Compiled);
-
-    private static string StripUntaggedThinking(string text)
+    private static string StripLeadingThinking(string text)
     {
-        // Safety net: strip orphaned </think> tag if IndexThinking missed it.
-        // Some servers return reasoning_content: null, leaving reasoning + </think> in content.
-        var thinkEnd = text.LastIndexOf("</think>", StringComparison.Ordinal);
-        if (thinkEnd >= 0)
-        {
-            text = text[(thinkEnd + "</think>".Length)..].TrimStart();
-        }
-
-        // Strip leading untagged thinking (find first heading)
+        // If structured content starts after >100 chars of preamble,
+        // the preamble is likely untagged thinking. Strip it.
         var match = MarkdownHeadingRegex.Match(text);
         if (match.Success && match.Index > 100)
         {
-            text = text[match.Index..];
-        }
-        else
-        {
-            match = NumberedKoreanHeadingRegex.Match(text);
-            if (match.Success && match.Index > 100)
-            {
-                text = text[match.Index..];
-            }
+            return text[match.Index..];
         }
 
-        // Strip trailing untagged thinking (continuation reasoning after structured content).
-        // Only strip if: match is past 1/3 of text AND trailing block > 200 chars.
-        var trailingMatch = TrailingReasoningRegex.Match(text);
-        if (trailingMatch.Success
-            && trailingMatch.Index > text.Length / 3
-            && text.Length - trailingMatch.Index > 200)
+        match = NumberedKoreanHeadingRegex.Match(text);
+        if (match.Success && match.Index > 100)
         {
-            text = text[..trailingMatch.Index];
+            return text[match.Index..];
         }
 
         return text;
