@@ -47,6 +47,10 @@ var promptFile = llmSection["PromptFile"] ?? "SUMMARIZE-PROMPT.md";
 var promptPath = Path.IsPathRooted(promptFile)
     ? promptFile
     : Path.Combine(AppContext.BaseDirectory, promptFile);
+// Fallback to current directory (deployed layout puts prompt next to exe,
+// but dev/test layout has it in the working directory)
+if (!File.Exists(promptPath))
+    promptPath = Path.Combine(Directory.GetCurrentDirectory(), promptFile);
 
 if (File.Exists(promptPath))
 {
@@ -85,7 +89,7 @@ builder.Services.AddSingleton<IChatClient>(sp =>
     return new ChatClientBuilder(innerClient)
         .UseIndexThinking(thinkingOpts =>
         {
-            thinkingOpts.EnableReasoning = true;
+            thinkingOpts.EnableReasoning = false;
             thinkingOpts.EnableContextTracking = false;
             thinkingOpts.EnableContextInjection = false;
             thinkingOpts.DefaultContinuation = new()
