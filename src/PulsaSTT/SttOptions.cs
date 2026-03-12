@@ -17,6 +17,12 @@ public class SttOptions : IPulsaOptions
     /// </summary>
     public string OutputPattern { get; set; } = "{name}.stt.txt";
 
+    /// <summary>
+    /// 출력 포맷: text (기본), vtt (WebVTT), srt (SubRip).
+    /// 쉼표로 여러 포맷 지정 가능 (예: "text,vtt,srt"), "all"은 전체 출력.
+    /// </summary>
+    public string OutputFormat { get; set; } = "text";
+
     /// <summary>LMSupply 모델명 (예: tiny, base, small, medium, large)</summary>
     public string Model { get; set; } = "large";
 
@@ -35,17 +41,49 @@ public class SttOptions : IPulsaOptions
     /// <summary>미처리 파일 주기적 재스캔 간격 (초). 0이면 비활성화.</summary>
     public int RescanIntervalSeconds { get; set; } = 60;
 
-    public string OutputWatchPattern => OutputPattern.Replace("{name}", "*").Replace("{ext}", "*");
+    private static readonly string[] AllFormats = ["text", "vtt", "srt"];
 
+    /// <summary>파싱된 출력 포맷 목록</summary>
+    public IReadOnlyList<string> OutputFormats => ParseFormats();
+
+    public string OutputWatchPattern => ResolvePatternForFormat(OutputFormats[0]).Replace("{name}", "*").Replace("{ext}", "*");
+
+    /// <summary>첫 번째 포맷 기준 출력 경로 (존재 여부 판단용)</summary>
     public string ResolveOutputPath(string filePath)
+        => ResolveOutputPath(filePath, OutputFormats[0]);
+
+    /// <summary>특정 포맷의 출력 경로</summary>
+    public string ResolveOutputPath(string filePath, string format)
     {
         var dir = Path.GetDirectoryName(filePath)!;
         var name = Path.GetFileNameWithoutExtension(filePath);
         var ext = Path.GetExtension(filePath).TrimStart('.');
-        var fileName = OutputPattern
+        var fileName = ResolvePatternForFormat(format)
             .Replace("{name}", name)
             .Replace("{ext}", ext);
         return Path.Combine(dir, fileName);
+    }
+
+    private static string ResolvePatternForFormat(string format)
+    {
+        return format.ToLowerInvariant() switch
+        {
+            "vtt" => "{name}.vtt",
+            "srt" => "{name}.srt",
+            _ => "{name}.stt.txt",
+        };
+    }
+
+    private IReadOnlyList<string> ParseFormats()
+    {
+        var raw = OutputFormat.Trim().ToLowerInvariant();
+        if (raw is "all" or "*")
+            return AllFormats;
+
+        return raw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(f => AllFormats.Contains(f))
+            .Distinct()
+            .ToArray() is { Length: > 0 } result ? result : ["text"];
     }
 
     public bool MatchesPattern(string filePath)

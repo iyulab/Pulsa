@@ -7,7 +7,7 @@
 | App | 설명 | 입력 | 출력 | 릴리즈 태그 |
 |-----|------|------|------|------------|
 | **PulsaAudioConvert** | 오디오 파일 포맷 변환 | `*.m4a` | `*.mp3` | `audio-convert-v*` |
-| **PulsaSTT** | 음성 파일을 텍스트로 변환 | `*.mp3` | `*.stt.txt` | `stt-v*` |
+| **PulsaSTT** | 음성 파일을 텍스트로 변환 | `*.mp3` | `*.stt.txt`, `*.vtt`, `*.srt` | `stt-v*` |
 | **PulsaLLM** | LLM 기반 텍스트 처리 | `*.stt.txt` | `*.{prompt}.md` | `llm-v*` |
 
 ### 파이프라인 예시
@@ -16,6 +16,8 @@
 
 ```
 *.m4a → [PulsaAudioConvert] → *.mp3 → [PulsaSTT] → *.stt.txt → [PulsaLLM] → *.summarize.md
+                                                   → *.vtt
+                                                   → *.srt
 ```
 
 ## 프로젝트 구조
@@ -24,7 +26,7 @@
 src/
 ├── Pulsa/                  # 공유 라이브러리 (FileWatcher, UpdateService, FileQueue 등)
 ├── PulsaAudioConvert/      # 오디오 변환 앱
-├── PulsaSTT/               # 음성 인식 앱
+├── PulsaSTT/               # 음성 인식 앱 (Whisper ONNX + GPU)
 └── PulsaLLM/               # LLM 텍스트 처리 앱
 ```
 
@@ -34,7 +36,11 @@ src/
 
 ## 설정
 
-각 앱의 `appsettings.json`에서 설정을 변경합니다.
+각 앱의 `appsettings.json`에서 설정을 변경합니다. 자세한 설정은 각 모듈의 README를 참고하세요.
+
+- [PulsaAudioConvert](src/PulsaAudioConvert/README.md)
+- [PulsaSTT](src/PulsaSTT/README.md)
+- [PulsaLLM](src/PulsaLLM/README.md)
 
 ### PulsaAudioConvert
 
@@ -58,9 +64,9 @@ src/
   "Stt": {
     "WatchPath": ".",
     "FilePattern": "*.mp3",
-    "OutputPattern": "{name}.stt.txt",
+    "OutputFormat": "all",
     "Model": "large",
-    "Language": ""
+    "Language": "ko"
   }
 }
 ```

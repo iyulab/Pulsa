@@ -53,23 +53,25 @@ public class TranscribeWorker(
             return;
         }
 
-        var outputPath = opts.ResolveOutputPath(filePath);
-        if (File.Exists(outputPath))
+        var formats = opts.OutputFormats;
+
+        // 모든 포맷의 출력이 이미 존재하면 스킵
+        if (formats.All(f => File.Exists(opts.ResolveOutputPath(filePath, f))))
         {
-            logger.LogDebug("Output already exists, skipping: {Path}", outputPath);
+            logger.LogDebug("All outputs already exist, skipping: {Path}", filePath);
             return;
         }
 
         if (!await FileHelper.WaitUntilReadyAsync(filePath, opts.FileReadyRetries, opts.FileReadyRetryDelayMs, logger, ct))
             return;
 
-        var tempPath = outputPath + ".tmp";
         logger.LogInformation("Transcribing: {Path}", filePath);
         try
         {
             var transcribeOptions = new TranscribeOptions
             {
                 NoSpeechThreshold = opts.NoSpeechThreshold,
+                WordTimestamps = true,
             };
             if (!string.IsNullOrWhiteSpace(opts.Language))
                 transcribeOptions.Language = opts.Language;
@@ -79,21 +81,42 @@ public class TranscribeWorker(
             if (string.IsNullOrWhiteSpace(result.Text))
                 logger.LogWarning("Empty transcription: {Path} (segments: {Count})", filePath, result.Segments.Count);
 
-            await File.WriteAllTextAsync(tempPath, result.Text, ct);
-            File.Move(tempPath, outputPath, overwrite: false);
+            foreach (var format in formats)
+            {
+                var outputPath = opts.ResolveOutputPath(filePath, format);
+                if (File.Exists(outputPath))
+                    continue;
 
-            logger.LogInformation("Done: {Path} ({Duration:F1}s audio, RTF {Rtf:F1}x, segments: {Count})",
-                outputPath, result.DurationSeconds, result.RealTimeFactor, result.Segments.Count);
+                var tempPath = outputPath + ".tmp";
+                try
+                {
+                    var content = SubtitleFormatter.Format(result, format);
+                    await File.WriteAllTextAsync(tempPath, content, ct);
+                    File.Move(tempPath, outputPath, overwrite: false);
+                    logger.LogInformation("Saved: {Path}", outputPath);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    logger.LogError(ex, "Failed to write: {Path}", outputPath);
+                    FileHelper.TryDelete(tempPath);
+                }
+            }
+
+            logger.LogInformation("Done: {File} ({Duration:F1}s audio, RTF {Rtf:F1}x, segments: {Count}, formats: {Formats})",
+                Path.GetFileName(filePath), result.DurationSeconds, result.RealTimeFactor,
+                result.Segments.Count, string.Join(",", formats));
         }
         catch (OperationCanceledException)
         {
-            FileHelper.TryDelete(tempPath);
+            foreach (var format in formats)
+                FileHelper.TryDelete(opts.ResolveOutputPath(filePath, format) + ".tmp");
             throw;
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Transcription failed: {Path}", filePath);
-            FileHelper.TryDelete(tempPath);
+            foreach (var format in formats)
+                FileHelper.TryDelete(opts.ResolveOutputPath(filePath, format) + ".tmp");
         }
     }
 }
