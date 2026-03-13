@@ -175,6 +175,7 @@ public class LlmWorker(
         var result = (response.Text ?? "").Trim();
         result = TrimDuplicateSections(result);
         result = StripInterSectionNoise(result);
+        result = TrimTrailingMetaText(result);
 
         if (result.Length == 0 || !SectionHeadingRegex.IsMatch(result))
         {
@@ -251,6 +252,51 @@ public class LlmWorker(
         }
 
         return string.Join('\n', result);
+    }
+
+    /// <summary>
+    /// Trims trailing conversational meta-text that some models append after the
+    /// structured output (e.g. "추가로 필요하신 내용이 있으시면…").
+    /// Detects trailing paragraphs after the last section content that don't start
+    /// with markdown formatting (-, *, |, #, >, digit.).
+    /// </summary>
+    internal static string TrimTrailingMetaText(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return text;
+
+        // Find the last section heading position
+        var lastHeading = SectionHeadingRegex.Match(text);
+        Match? last = null;
+        while (lastHeading.Success)
+        {
+            last = lastHeading;
+            lastHeading = lastHeading.NextMatch();
+        }
+        if (last is null) return text;
+
+        // Within the last section, find the end of structured content:
+        // the last line starting with -, *, |, >, digit, or bold **
+        var sectionContent = text[last.Index..];
+        var lines = sectionContent.Split('\n');
+        var lastContentLineIndex = -1;
+        for (var i = 0; i < lines.Length; i++)
+        {
+            var trimmed = lines[i].TrimStart();
+            if (trimmed.Length == 0) continue;
+            if (trimmed.StartsWith('#') || trimmed.StartsWith('-') || trimmed.StartsWith('*')
+                || trimmed.StartsWith('|') || trimmed.StartsWith('>')
+                || (trimmed.Length > 1 && char.IsDigit(trimmed[0]) && trimmed[1] is '.' or ')'))
+            {
+                lastContentLineIndex = i;
+            }
+        }
+
+        if (lastContentLineIndex < 0) return text;
+
+        // Rebuild: everything before last section + section up to last content line
+        var prefix = text[..last.Index];
+        var kept = string.Join('\n', lines[..(lastContentLineIndex + 1)]);
+        return (prefix + kept).TrimEnd();
     }
 
     // Regex to parse "maximum context length is X tokens ... Y input tokens" from API error
