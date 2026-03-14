@@ -172,16 +172,34 @@ public class LlmWorker(
         List<ChatMessage> messages, ChatOptions? chatOptions, string filePath, CancellationToken ct)
     {
         var response = await CallWithRetryAsync(messages, chatOptions, filePath, ct);
-        var result = (response.Text ?? "").Trim();
+        var rawResult = (response.Text ?? "").Trim();
+
+        if (rawResult.Length == 0)
+        {
+            logger.LogWarning("LLM returned empty response — skipping: {Path}", filePath);
+            return null;
+        }
+
+        var result = rawResult;
         result = TrimDuplicateSections(result);
         result = StripInterSectionNoise(result);
         result = TrimTrailingMetaText(result);
 
+        if (result.Length < rawResult.Length)
+        {
+            logger.LogDebug(
+                "Post-processing trimmed response from {RawLength} to {Length} chars: {Path}",
+                rawResult.Length, result.Length, filePath);
+        }
+
         if (result.Length == 0 || !SectionHeadingRegex.IsMatch(result))
         {
+            var preview = rawResult.Length <= 500
+                ? rawResult
+                : rawResult[..500] + "…";
             logger.LogWarning(
-                "LLM returned no usable content (length={Length}) — skipping: {Path}",
-                result.Length, filePath);
+                "LLM returned no usable content (length={Length}, raw={RawLength}) — skipping: {Path}\n--- Response preview ---\n{Preview}\n--- End preview ---",
+                result.Length, rawResult.Length, filePath, preview);
             return null;
         }
 
