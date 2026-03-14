@@ -159,14 +159,8 @@ public class LlmWorker(
         }
     }
 
-    // Regex to detect the first section heading "### 1."
-    private static readonly Regex FirstSectionRegex = new(
-        @"^###\s+1\.", RegexOptions.Compiled | RegexOptions.Multiline);
-
     /// <summary>
-    /// Calls the LLM and validates the response has all expected sections.
-    /// If section 1 is missing (common when thinking tokens consume the output budget),
-    /// synthesizes it from section 3 (핵심 논지 전개).
+    /// Calls the LLM and validates the response contains section headings.
     /// </summary>
     private async Task<string?> CallAndValidateAsync(
         List<ChatMessage> messages, ChatOptions? chatOptions, string filePath, CancellationToken ct)
@@ -180,10 +174,7 @@ public class LlmWorker(
             return null;
         }
 
-        var result = rawResult;
-        result = TrimDuplicateSections(result);
-        result = StripInterSectionNoise(result);
-        result = TrimTrailingMetaText(result);
+        var result = TrimDuplicateSections(rawResult);
 
         if (result.Length < rawResult.Length)
         {
@@ -192,7 +183,7 @@ public class LlmWorker(
                 rawResult.Length, result.Length, filePath);
         }
 
-        if (result.Length == 0 || !SectionHeadingRegex.IsMatch(result))
+        if (!SectionHeadingRegex.IsMatch(result))
         {
             var preview = rawResult.Length <= 500
                 ? rawResult
@@ -203,118 +194,7 @@ public class LlmWorker(
             return null;
         }
 
-        if (FirstSectionRegex.IsMatch(result))
-            return result;
-
-        // Section 1 missing — synthesize from first available section's content
-        var section1 = SynthesizeSection1(result);
-        if (section1 is not null)
-        {
-            logger.LogInformation(
-                "Section 1 synthesized from existing content: {Path}", filePath);
-            return section1 + "\n\n" + result;
-        }
-
-        logger.LogWarning(
-            "Section 1 missing, could not synthesize: {Path}", filePath);
         return result;
-    }
-
-    // Regex to strip leading list markers: "- ", "* ", "1. ", "**bold**: "
-    private static readonly Regex ListMarkerRegex = new(
-        @"^(?:[-*]\s*)?(?:\d+\.\s*)?(?:\*\*[^*]+\*\*:?\s*)?",
-        RegexOptions.Compiled);
-
-    /// <summary>
-    /// Synthesizes section 1 (핵심 주제) from the first available section's content.
-    /// Extracts the first CJK-containing content line from the first section heading found.
-    /// </summary>
-    internal static string? SynthesizeSection1(string text)
-    {
-        var headingMatch = SectionHeadingRegex.Match(text);
-        if (!headingMatch.Success) return null;
-
-        // Scan lines after the first heading for a CJK-containing content line
-        var afterHeading = text[(headingMatch.Index + headingMatch.Length)..];
-        foreach (var line in afterHeading.Split('\n'))
-        {
-            var trimmed = line.Trim();
-            if (trimmed.Length == 0) continue;
-            if (SectionHeadingRegex.IsMatch(trimmed)) break; // hit next section
-
-            // Strip list markers and bold labels
-            var content = ListMarkerRegex.Replace(trimmed, "").Trim();
-            if (content.Length >= 10 && HasAnyCjk(content))
-                return "### 1. 핵심 주제\n- " + content;
-        }
-
-        return null;
-    }
-
-    /// <summary>
-    /// Removes non-CJK lines between section headings (e.g. "Then section 5:").
-    /// These are artifacts from thinking models that leak reasoning into output.
-    /// </summary>
-    internal static string StripInterSectionNoise(string text)
-    {
-        if (string.IsNullOrEmpty(text)) return text;
-
-        var lines = text.Split('\n');
-        var result = new List<string>(lines.Length);
-        foreach (var line in lines)
-        {
-            var trimmed = line.Trim();
-            // Keep blank lines, section headings, and lines with CJK
-            if (trimmed.Length == 0 || SectionHeadingRegex.IsMatch(trimmed) || HasAnyCjk(trimmed))
-                result.Add(line);
-        }
-
-        return string.Join('\n', result);
-    }
-
-    /// <summary>
-    /// Trims trailing conversational meta-text that some models append after the
-    /// structured output (e.g. "추가로 필요하신 내용이 있으시면…").
-    /// Detects trailing paragraphs after the last section content that don't start
-    /// with markdown formatting (-, *, |, #, >, digit.).
-    /// </summary>
-    internal static string TrimTrailingMetaText(string text)
-    {
-        if (string.IsNullOrEmpty(text)) return text;
-
-        // Find the last section heading position
-        var lastHeading = SectionHeadingRegex.Match(text);
-        Match? last = null;
-        while (lastHeading.Success)
-        {
-            last = lastHeading;
-            lastHeading = lastHeading.NextMatch();
-        }
-        if (last is null) return text;
-
-        // Within the last section, find the end of structured content:
-        // the last line starting with -, *, |, >, digit, or bold **
-        var sectionContent = text[last.Index..];
-        var lines = sectionContent.Split('\n');
-        var lastContentLineIndex = -1;
-        for (var i = 0; i < lines.Length; i++)
-        {
-            var trimmed = lines[i].TrimStart();
-            if (trimmed.Length == 0) continue;
-            if (trimmed.StartsWith('#') || trimmed.StartsWith('-') || trimmed.StartsWith('*')
-                || trimmed.StartsWith('|') || trimmed.StartsWith('>')
-                || (trimmed.Length > 1 && char.IsDigit(trimmed[0]) && trimmed[1] is '.' or ')'))
-            {
-                lastContentLineIndex = i;
-            }
-        }
-
-        if (lastContentLineIndex < 0) return text;
-
-        // Rebuild: everything before last section + section up to last content line
-        var prefix = text[..last.Index];
-        var kept = string.Join('\n', lines[..(lastContentLineIndex + 1)]);
-        return (prefix + kept).TrimEnd();
     }
 
     // Regex to parse "maximum context length is X tokens ... Y input tokens" from API error
@@ -425,14 +305,12 @@ public class LlmWorker(
     /// <summary>
     /// Detects duplicate numbered sections (e.g. "### 3." appearing twice) caused by
     /// continuation overlap and truncates at the first repeated heading.
-    /// Also trims trailing non-CJK content after the last section (reasoning noise).
     /// </summary>
     internal static string TrimDuplicateSections(string text)
     {
         if (string.IsNullOrEmpty(text)) return text;
 
         var seen = new HashSet<string>();
-        var lastSectionEnd = -1;
         foreach (Match match in SectionHeadingRegex.Matches(text))
         {
             var sectionNum = match.Groups[1].Value;
@@ -441,54 +319,8 @@ public class LlmWorker(
                 // Found a duplicate — truncate at this position
                 return text[..match.Index].TrimEnd();
             }
-            lastSectionEnd = match.Index;
-        }
-
-        // Trim trailing non-CJK noise after the last section block
-        if (lastSectionEnd >= 0)
-        {
-            text = TrimTrailingNonCjk(text);
         }
 
         return text;
-    }
-
-    /// <summary>
-    /// Scans backwards from the end of text; if trailing paragraphs contain no CJK
-    /// characters (e.g. leaked English reasoning), trims them.
-    /// </summary>
-    private static string TrimTrailingNonCjk(string text)
-    {
-        // Find the last blank-line boundary
-        var searchFrom = text.Length;
-        while (true)
-        {
-            var blankLine = text.LastIndexOf("\n\n", searchFrom - 1, StringComparison.Ordinal);
-            if (blankLine < 0 || blankLine < text.Length / 2) break;
-
-            var trailing = text[(blankLine + 2)..];
-            if (trailing.Length < 10) break;
-
-            if (HasAnyCjk(trailing)) break;
-
-            // Trailing block has no CJK — remove it
-            text = text[..blankLine].TrimEnd();
-            searchFrom = text.Length;
-        }
-
-        return text;
-    }
-
-    private static bool HasAnyCjk(string text)
-    {
-        foreach (var c in text)
-        {
-            if (c is (>= '\uAC00' and <= '\uD7A3')   // Korean Hangul
-                  or (>= '\u3131' and <= '\u318E')     // Korean Jamo
-                  or (>= '\u4E00' and <= '\u9FFF')     // CJK Ideographs
-                  or (>= '\u3040' and <= '\u30FF'))     // Hiragana/Katakana
-                return true;
-        }
-        return false;
     }
 }
