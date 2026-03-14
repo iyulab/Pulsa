@@ -115,7 +115,12 @@ host.Run();
 
 static IChatClient CreateOpenAiClient(ProviderOptions opts)
 {
-    var openAiClient = new OpenAIClient(opts.ApiKey);
+    var clientOptions = new OpenAIClientOptions
+    {
+        NetworkTimeout = TimeSpan.FromMinutes(10),
+    };
+    var credential = new System.ClientModel.ApiKeyCredential(opts.ApiKey);
+    var openAiClient = new OpenAIClient(credential, clientOptions);
     return openAiClient.GetChatClient(opts.Model).AsIChatClient();
 }
 
@@ -123,7 +128,11 @@ static IChatClient CreateOpenAiCompatibleClient(ProviderOptions opts)
 {
     var endpoint = new Uri(opts.Host.TrimEnd('/') + opts.PathPrefix);
     var credential = new System.ClientModel.ApiKeyCredential(opts.ApiKey);
-    var clientOptions = new OpenAIClientOptions { Endpoint = endpoint };
+    var clientOptions = new OpenAIClientOptions
+    {
+        Endpoint = endpoint,
+        NetworkTimeout = TimeSpan.FromMinutes(10),
+    };
     var openAiClient = new OpenAIClient(credential, clientOptions);
     return openAiClient.GetChatClient(opts.Model).AsIChatClient();
 }

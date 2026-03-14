@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk.Worker">
 
   <PropertyGroup>
-    <Version>0.1.20</Version>
+    <Version>0.1.21</Version>
   </PropertyGroup>
 
   <ItemGroup>
