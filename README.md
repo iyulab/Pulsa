@@ -20,6 +20,19 @@
                                                    → *.srt
 ```
 
+## 멀티 태스크
+
+각 앱은 하나의 프로세스에서 여러 작업을 동시에 처리할 수 있습니다. `Tasks` 배열에 작업을 정의하면 각 작업마다 독립적으로 폴더를 감시하고, 공유 큐를 통해 순차적으로 처리합니다.
+
+```json
+{
+  "Tasks": [
+    { "Name": "meetings", "WatchPath": "D:/recordings/meetings", "FilePattern": "*.mp3" },
+    { "Name": "lectures", "WatchPath": "D:/recordings/lectures", "FilePattern": "*.mp3" }
+  ]
+}
+```
+
 ## 프로젝트 구조
 
 ```
@@ -46,14 +59,17 @@ src/
 
 ```json
 {
-  "Convert": {
-    "WatchPath": ".",
-    "FilePattern": "*.m4a",
-    "OutputExtension": ".mp3",
-    "AudioCodec": "libmp3lame",
-    "AudioBitrate": 192,
-    "DeleteSource": false
-  }
+  "Tasks": [
+    {
+      "Name": "default",
+      "WatchPath": ".",
+      "FilePattern": "*.m4a",
+      "OutputExtension": ".mp3",
+      "AudioCodec": "libmp3lame",
+      "AudioBitrate": 192,
+      "DeleteSource": false
+    }
+  ]
 }
 ```
 
@@ -61,13 +77,16 @@ src/
 
 ```json
 {
-  "Stt": {
-    "WatchPath": ".",
-    "FilePattern": "*.mp3",
-    "OutputFormat": "all",
-    "Model": "large",
-    "Language": "ko"
-  }
+  "Tasks": [
+    {
+      "Name": "default",
+      "WatchPath": ".",
+      "FilePattern": "*.mp3",
+      "OutputFormat": "all",
+      "Model": "large",
+      "Language": "ko"
+    }
+  ]
 }
 ```
 
@@ -75,29 +94,31 @@ src/
 
 ```json
 {
-  "LLM": {
-    "WatchPath": ".",
-    "FilePattern": "*.stt.txt",
-    "PromptFile": "SUMMARIZE-PROMPT.md",
-    "Provider": {
-      "Type": "local",
-      "Model": "default"
+  "Provider": {
+    "Type": "openai-compatible",
+    "Host": "http://localhost:1234",
+    "Model": "local-model"
+  },
+  "Tasks": [
+    {
+      "Name": "default",
+      "WatchPath": ".",
+      "FilePattern": "*.stt.txt",
+      "PromptFile": "SUMMARIZE-PROMPT.md"
     }
-  }
+  ]
 }
 ```
 
-Provider 종류: `local` (기본, 로컬 LLM), `openai`, `openai-compatible`
+Provider 종류: `openai`, `openai-compatible`
 
 OpenAI 사용 시:
 ```json
 {
-  "LLM": {
-    "Provider": {
-      "Type": "openai",
-      "Model": "gpt-4o",
-      "ApiKey": "sk-..."
-    }
+  "Provider": {
+    "Type": "openai",
+    "Model": "gpt-4o",
+    "ApiKey": "sk-..."
   }
 }
 ```

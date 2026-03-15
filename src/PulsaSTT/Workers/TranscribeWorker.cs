@@ -1,12 +1,11 @@
 using LMSupply.Transcriber;
-using Microsoft.Extensions.Options;
 using Pulsa;
 
 namespace PulsaSTT.Workers;
 
 public class TranscribeWorker(
     FileQueue queue,
-    IOptions<SttOptions> options,
+    IReadOnlyList<SttTaskOptions> tasks,
     ILogger<TranscribeWorker> logger) : BackgroundService
 {
     protected override Task ExecuteAsync(CancellationToken stoppingToken)
@@ -18,8 +17,10 @@ public class TranscribeWorker(
 
     private async Task RunAsync(CancellationToken stoppingToken)
     {
-        var opts = options.Value;
-        logger.LogInformation("Loading STT model: {Model}...", opts.Model);
+        // Pre-load all unique models
+        var modelNames = tasks.Select(t => t.Model).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var models = new Dictionary<string, ITranscriberModel>(StringComparer.OrdinalIgnoreCase);
+
         var progress = new Progress<LMSupply.DownloadProgress>(p =>
         {
             if (p.TotalBytes > 0)
@@ -28,44 +29,77 @@ public class TranscribeWorker(
             else
                 logger.LogInformation("Downloading {File}: {Downloaded:F1} MB", p.FileName, p.BytesDownloaded / 1_048_576.0);
         });
-        await using var transcriber = await LocalTranscriber.LoadAsync(opts.Model, progress: progress, cancellationToken: stoppingToken);
-        logger.LogInformation("STT model loaded. GPU: {Gpu} [{Providers}]",
-            transcriber.IsGpuActive, string.Join(", ", transcriber.ActiveProviders));
 
-        await foreach (var filePath in queue.Reader.ReadAllAsync(stoppingToken))
+        foreach (var modelName in modelNames)
         {
-            try
+            logger.LogInformation("Loading STT model: {Model}...", modelName);
+            var transcriber = await LocalTranscriber.LoadAsync(modelName, progress: progress, cancellationToken: stoppingToken);
+            models[modelName] = transcriber;
+            logger.LogInformation("STT model loaded: {Model}. GPU: {Gpu} [{Providers}]",
+                modelName, transcriber.IsGpuActive, string.Join(", ", transcriber.ActiveProviders));
+        }
+
+        logger.LogInformation("STT worker started with {Count} task(s):", tasks.Count);
+        for (var i = 0; i < tasks.Count; i++)
+        {
+            var t = tasks[i];
+            logger.LogInformation("  [{Index}] {Name}: {Path} ({Pattern}, model: {Model}, lang: {Lang})",
+                i, t.Name ?? $"Task#{i}", t.WatchPath, t.FilePattern, t.Model,
+                string.IsNullOrEmpty(t.Language) ? "auto" : t.Language);
+        }
+
+        try
+        {
+            await foreach (var item in queue.Reader.ReadAllAsync(stoppingToken))
             {
-                await TranscribeAsync(transcriber, filePath, opts, stoppingToken);
+                var opts = tasks[item.TaskIndex];
+                var label = opts.Name ?? $"Task#{item.TaskIndex}";
+                var model = models[opts.Model];
+                try
+                {
+                    await TranscribeAsync(model, item.FilePath, opts, label, stoppingToken);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    logger.LogError(ex, "[{Label}] Transcription failed: {Path}", label, item.FilePath);
+                }
+                finally
+                {
+                    queue.Complete(item.FilePath, item.TaskIndex);
+                }
             }
-            finally
+        }
+        finally
+        {
+            foreach (var model in models.Values)
             {
-                queue.Complete(filePath);
+                if (model is IAsyncDisposable ad) await ad.DisposeAsync();
+                else if (model is IDisposable d) d.Dispose();
             }
         }
     }
 
-    private async Task TranscribeAsync(ITranscriberModel transcriber, string filePath, SttOptions opts, CancellationToken ct)
+    private async Task TranscribeAsync(
+        ITranscriberModel transcriber, string filePath, SttTaskOptions opts, string label, CancellationToken ct)
     {
         if (!File.Exists(filePath))
         {
-            logger.LogWarning("File not found, skipping: {Path}", filePath);
+            logger.LogWarning("[{Label}] File not found, skipping: {Path}", label, filePath);
             return;
         }
 
         var formats = opts.OutputFormats;
 
-        // 모든 포맷의 출력이 이미 존재하면 스킵
         if (formats.All(f => File.Exists(opts.ResolveOutputPath(filePath, f))))
         {
-            logger.LogDebug("All outputs already exist, skipping: {Path}", filePath);
+            logger.LogDebug("[{Label}] All outputs already exist, skipping: {Path}", label, filePath);
             return;
         }
 
         if (!await FileHelper.WaitUntilReadyAsync(filePath, opts.FileReadyRetries, opts.FileReadyRetryDelayMs, logger, ct))
             return;
 
-        logger.LogInformation("Transcribing: {Path}", filePath);
+        logger.LogInformation("[{Label}] Transcribing: {Path}", label, filePath);
         try
         {
             var transcribeOptions = new TranscribeOptions
@@ -79,7 +113,7 @@ public class TranscribeWorker(
             var result = await transcriber.TranscribeAsync(filePath, transcribeOptions, ct);
 
             if (string.IsNullOrWhiteSpace(result.Text))
-                logger.LogWarning("Empty transcription: {Path} (segments: {Count})", filePath, result.Segments.Count);
+                logger.LogWarning("[{Label}] Empty transcription: {Path} (segments: {Count})", label, filePath, result.Segments.Count);
 
             foreach (var format in formats)
             {
@@ -93,17 +127,17 @@ public class TranscribeWorker(
                     var content = SubtitleFormatter.Format(result, format);
                     await File.WriteAllTextAsync(tempPath, content, ct);
                     File.Move(tempPath, outputPath, overwrite: false);
-                    logger.LogInformation("Saved: {Path}", outputPath);
+                    logger.LogInformation("[{Label}] Saved: {Path}", label, outputPath);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
-                    logger.LogError(ex, "Failed to write: {Path}", outputPath);
+                    logger.LogError(ex, "[{Label}] Failed to write: {Path}", label, outputPath);
                     FileHelper.TryDelete(tempPath);
                 }
             }
 
-            logger.LogInformation("Done: {File} ({Duration:F1}s audio, RTF {Rtf:F1}x, segments: {Count}, formats: {Formats})",
-                Path.GetFileName(filePath), result.DurationSeconds, result.RealTimeFactor,
+            logger.LogInformation("[{Label}] Done: {File} ({Duration:F1}s audio, RTF {Rtf:F1}x, segments: {Count}, formats: {Formats})",
+                label, Path.GetFileName(filePath), result.DurationSeconds, result.RealTimeFactor,
                 result.Segments.Count, string.Join(",", formats));
         }
         catch (OperationCanceledException)
@@ -114,7 +148,7 @@ public class TranscribeWorker(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Transcription failed: {Path}", filePath);
+            logger.LogError(ex, "[{Label}] Transcription failed: {Path}", label, filePath);
             foreach (var format in formats)
                 FileHelper.TryDelete(opts.ResolveOutputPath(filePath, format) + ".tmp");
         }

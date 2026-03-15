@@ -15,25 +15,28 @@ PulsaSTT.exe
 
 ## 설정
 
+`Tasks` 배열에 하나 이상의 작업을 정의합니다. 하나의 프로세스에서 여러 폴더/설정을 동시에 감시할 수 있습니다.
+
 ```json
 {
-  "Stt": {
-    "WatchPath": ".",
-    "FilePattern": "*.mp3",
-    "OutputPattern": "{name}.stt.txt",
-    "OutputFormat": "all",
-    "Model": "large",
-    "Language": "ko",
-    "NoSpeechThreshold": 0.6,
-    "FileReadyRetries": 20,
-    "FileReadyRetryDelayMs": 500,
-    "RescanIntervalSeconds": 60
-  }
+  "Tasks": [
+    {
+      "Name": "default",
+      "WatchPath": ".",
+      "FilePattern": "*.mp3",
+      "OutputPattern": "{name}.stt.txt",
+      "OutputFormat": "text",
+      "Model": "large",
+      "Language": "ko",
+      "NoSpeechThreshold": 0.6
+    }
+  ]
 }
 ```
 
 | 설정 | 설명 | 기본값 |
 |------|------|--------|
+| `Name` | 작업 이름 (로그 식별용, 선택) | |
 | `WatchPath` | 감시할 디렉터리 경로 | `.` |
 | `FilePattern` | 입력 파일 패턴 | `*.mp3` |
 | `OutputPattern` | 텍스트 출력 파일명 패턴 (`{name}` = 원본 파일명) | `{name}.stt.txt` |
@@ -42,6 +45,33 @@ PulsaSTT.exe
 | `Language` | 언어 코드 (빈 문자열이면 자동 감지) | `""` |
 | `NoSpeechThreshold` | 묵음 감지 임계값 (0.0 ~ 1.0) | `0.8` |
 | `RescanIntervalSeconds` | 미처리 파일 재스캔 간격 (초, 0이면 비활성화) | `60` |
+
+### 멀티 태스크 예시
+
+```json
+{
+  "Tasks": [
+    {
+      "Name": "meetings-ko",
+      "WatchPath": "D:/recordings/meetings",
+      "FilePattern": "*.mp3",
+      "OutputFormat": "all",
+      "Model": "large",
+      "Language": "ko"
+    },
+    {
+      "Name": "english-content",
+      "WatchPath": "D:/recordings/english",
+      "FilePattern": "*.mp3",
+      "OutputFormat": "text",
+      "Model": "large",
+      "Language": "en"
+    }
+  ]
+}
+```
+
+같은 모델을 사용하는 작업들은 모델 인스턴스를 자동으로 공유합니다.
 
 ## 출력 포맷
 
@@ -107,5 +137,5 @@ STT model loaded. GPU: True [CUDAExecutionProvider, CPUExecutionProvider]
 `appsettings.json` 설정을 커맨드라인에서 오버라이드할 수 있습니다:
 
 ```bash
-PulsaSTT --Stt:WatchPath=/path/to/audio --Stt:OutputFormat=all --Stt:Language=ko
+PulsaSTT --Tasks:0:WatchPath=/path/to/audio --Tasks:0:OutputFormat=all --Tasks:0:Language=ko
 ```

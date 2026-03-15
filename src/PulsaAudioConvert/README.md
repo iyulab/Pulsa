@@ -19,24 +19,27 @@ PulsaAudioConvert.exe
 
 ## 설정
 
+`Tasks` 배열에 하나 이상의 작업을 정의합니다. 하나의 프로세스에서 여러 폴더/설정을 동시에 감시할 수 있습니다.
+
 ```json
 {
-  "Convert": {
-    "WatchPath": ".",
-    "FilePattern": "*.m4a",
-    "OutputExtension": ".mp3",
-    "AudioCodec": "libmp3lame",
-    "AudioBitrate": 192,
-    "DeleteSource": false,
-    "FileReadyRetries": 10,
-    "FileReadyRetryDelayMs": 500,
-    "RescanIntervalSeconds": 60
-  }
+  "Tasks": [
+    {
+      "Name": "default",
+      "WatchPath": ".",
+      "FilePattern": "*.m4a",
+      "OutputExtension": ".mp3",
+      "AudioCodec": "libmp3lame",
+      "AudioBitrate": 192,
+      "DeleteSource": false
+    }
+  ]
 }
 ```
 
 | 설정 | 설명 | 기본값 |
 |------|------|--------|
+| `Name` | 작업 이름 (로그 식별용, 선택) | |
 | `WatchPath` | 감시할 디렉터리 경로 | `.` |
 | `FilePattern` | 입력 파일 패턴 | `*.m4a` |
 | `OutputExtension` | 출력 파일 확장자 | `.mp3` |
@@ -45,8 +48,30 @@ PulsaAudioConvert.exe
 | `DeleteSource` | 변환 후 원본 파일 삭제 여부 | `false` |
 | `RescanIntervalSeconds` | 미처리 파일 재스캔 간격 (초) | `60` |
 
+### 멀티 태스크 예시
+
+```json
+{
+  "Tasks": [
+    {
+      "Name": "meetings",
+      "WatchPath": "D:/recordings/meetings",
+      "FilePattern": "*.m4a",
+      "OutputExtension": ".mp3"
+    },
+    {
+      "Name": "podcasts",
+      "WatchPath": "D:/recordings/podcasts",
+      "FilePattern": "*.wav",
+      "OutputExtension": ".mp3",
+      "AudioBitrate": 128
+    }
+  ]
+}
+```
+
 ## CLI 오버라이드
 
 ```bash
-PulsaAudioConvert --Convert:WatchPath=/path/to/audio --Convert:AudioBitrate=320
+PulsaAudioConvert --Tasks:0:WatchPath=/path/to/audio --Tasks:0:AudioBitrate=320
 ```

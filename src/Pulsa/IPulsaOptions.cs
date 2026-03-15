@@ -2,6 +2,7 @@ namespace Pulsa;
 
 public interface IPulsaOptions
 {
+    string? Name { get; }
     string WatchPath { get; }
     string FilePattern { get; }
     string OutputWatchPattern { get; }

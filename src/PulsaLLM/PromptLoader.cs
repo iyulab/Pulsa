@@ -50,6 +50,7 @@ public static class PromptLoader
             Model = baseOptions.Model,
             ApiKey = baseOptions.ApiKey,
             Host = baseOptions.Host,
+            PathPrefix = baseOptions.PathPrefix,
             MaxTokens = baseOptions.MaxTokens,
         };
 

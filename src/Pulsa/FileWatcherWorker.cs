@@ -1,105 +1,146 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 
 namespace Pulsa;
 
-public class FileWatcherWorker<TOptions>(
+public class FileWatcherWorker(
     FileQueue queue,
-    IOptions<TOptions> options,
-    ILogger<FileWatcherWorker<TOptions>> logger) : BackgroundService
-    where TOptions : class, IPulsaOptions
+    IReadOnlyList<IPulsaOptions> tasks,
+    ILogger<FileWatcherWorker> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var opts = options.Value;
-        var watchPath = Path.GetFullPath(opts.WatchPath);
-
-        Directory.CreateDirectory(watchPath);
-
-        CleanStaleTempFiles(watchPath, opts);
-        ScanAndEnqueue(watchPath, opts);
-
-        using var watcher = new FileSystemWatcher(watchPath, opts.FilePattern)
+        if (tasks.Count == 0)
         {
-            NotifyFilter = NotifyFilters.FileName | NotifyFilters.CreationTime,
-            InternalBufferSize = 64 * 1024,
-            EnableRaisingEvents = true
-        };
+            logger.LogWarning("No tasks configured — file watcher idle");
+            return;
+        }
 
-        watcher.Created += (_, e) => OnFileDetected(e.FullPath, opts);
-        watcher.Renamed += (_, e) =>
-        {
-            if (opts.MatchesPattern(e.FullPath))
-                OnFileDetected(e.FullPath, opts);
-        };
-        watcher.Error += (_, e) =>
-        {
-            logger.LogWarning(e.GetException(), "FileSystemWatcher error, triggering rescan");
-            ScanAndEnqueue(watchPath, opts);
-        };
+        var watchers = new List<FileSystemWatcher>();
 
-        using var outputWatcher = new FileSystemWatcher(watchPath, opts.OutputWatchPattern)
+        try
         {
-            NotifyFilter = NotifyFilters.FileName,
-            InternalBufferSize = 64 * 1024,
-            EnableRaisingEvents = true
-        };
-
-        outputWatcher.Deleted += (_, e) =>
-        {
-            logger.LogInformation("Output removed, re-scanning: {File}", e.FullPath);
-            ScanAndEnqueue(watchPath, opts);
-        };
-        outputWatcher.Renamed += (_, e) =>
-        {
-            logger.LogInformation("Output renamed, re-scanning: {OldFile} → {NewFile}", e.OldFullPath, e.FullPath);
-            ScanAndEnqueue(watchPath, opts);
-        };
-        outputWatcher.Error += (_, e) =>
-        {
-            logger.LogWarning(e.GetException(), "Output watcher error, triggering rescan");
-            ScanAndEnqueue(watchPath, opts);
-        };
-
-        logger.LogInformation("Watching {Path} for {Pattern} (output: {OutputPattern})",
-            watchPath, opts.FilePattern, opts.OutputWatchPattern);
-
-        if (opts.RescanIntervalSeconds > 0)
-        {
-            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(opts.RescanIntervalSeconds));
-            while (await timer.WaitForNextTickAsync(stoppingToken))
+            for (var i = 0; i < tasks.Count; i++)
             {
-                ScanAndEnqueue(watchPath, opts);
+                var taskIndex = i;
+                var opts = tasks[i];
+                var watchPath = Path.GetFullPath(opts.WatchPath);
+                Directory.CreateDirectory(watchPath);
+
+                CleanStaleTempFiles(watchPath, opts);
+                ScanAndEnqueue(watchPath, opts, taskIndex);
+
+                var inputWatcher = new FileSystemWatcher(watchPath, opts.FilePattern)
+                {
+                    NotifyFilter = NotifyFilters.FileName | NotifyFilters.CreationTime,
+                    InternalBufferSize = 64 * 1024,
+                    EnableRaisingEvents = true
+                };
+
+                inputWatcher.Created += (_, e) => OnFileDetected(e.FullPath, opts, taskIndex);
+                inputWatcher.Renamed += (_, e) =>
+                {
+                    if (opts.MatchesPattern(e.FullPath))
+                        OnFileDetected(e.FullPath, opts, taskIndex);
+                };
+                inputWatcher.Error += (_, e) =>
+                {
+                    logger.LogWarning(e.GetException(),
+                        "[Task#{Index} {Name}] FileSystemWatcher error, triggering rescan",
+                        taskIndex, opts.Name ?? taskIndex.ToString());
+                    ScanAndEnqueue(watchPath, opts, taskIndex);
+                };
+                watchers.Add(inputWatcher);
+
+                var outputWatcher = new FileSystemWatcher(watchPath, opts.OutputWatchPattern)
+                {
+                    NotifyFilter = NotifyFilters.FileName,
+                    InternalBufferSize = 64 * 1024,
+                    EnableRaisingEvents = true
+                };
+
+                outputWatcher.Deleted += (_, e) =>
+                {
+                    logger.LogInformation(
+                        "[Task#{Index} {Name}] Output removed, re-scanning: {File}",
+                        taskIndex, opts.Name ?? taskIndex.ToString(), e.FullPath);
+                    ScanAndEnqueue(watchPath, opts, taskIndex);
+                };
+                outputWatcher.Renamed += (_, e) =>
+                {
+                    logger.LogInformation(
+                        "[Task#{Index} {Name}] Output renamed, re-scanning: {OldFile} → {NewFile}",
+                        taskIndex, opts.Name ?? taskIndex.ToString(), e.OldFullPath, e.FullPath);
+                    ScanAndEnqueue(watchPath, opts, taskIndex);
+                };
+                outputWatcher.Error += (_, e) =>
+                {
+                    logger.LogWarning(e.GetException(),
+                        "[Task#{Index} {Name}] Output watcher error, triggering rescan",
+                        taskIndex, opts.Name ?? taskIndex.ToString());
+                    ScanAndEnqueue(watchPath, opts, taskIndex);
+                };
+                watchers.Add(outputWatcher);
+
+                var label = opts.Name ?? $"Task#{taskIndex}";
+                logger.LogInformation(
+                    "[{Label}] Watching {Path} for {Pattern} (output: {OutputPattern})",
+                    label, watchPath, opts.FilePattern, opts.OutputWatchPattern);
+            }
+
+            var minInterval = tasks
+                .Where(t => t.RescanIntervalSeconds > 0)
+                .Select(t => t.RescanIntervalSeconds)
+                .DefaultIfEmpty(0)
+                .Min();
+
+            if (minInterval > 0)
+            {
+                using var timer = new PeriodicTimer(TimeSpan.FromSeconds(minInterval));
+                while (await timer.WaitForNextTickAsync(stoppingToken))
+                {
+                    for (var i = 0; i < tasks.Count; i++)
+                    {
+                        var opts = tasks[i];
+                        var watchPath = Path.GetFullPath(opts.WatchPath);
+                        ScanAndEnqueue(watchPath, opts, i);
+                    }
+                }
+            }
+            else
+            {
+                await Task.Delay(Timeout.Infinite, stoppingToken).ConfigureAwait(false);
             }
         }
-        else
+        finally
         {
-            await Task.Delay(Timeout.Infinite, stoppingToken).ConfigureAwait(false);
+            foreach (var w in watchers) w.Dispose();
         }
     }
 
-    private void ScanAndEnqueue(string watchPath, TOptions opts)
+    private void ScanAndEnqueue(string watchPath, IPulsaOptions opts, int taskIndex)
     {
         try
         {
             foreach (var file in Directory.GetFiles(watchPath, opts.FilePattern))
             {
                 var outputPath = opts.ResolveOutputPath(file);
-                if (!File.Exists(outputPath) && !queue.Contains(file))
+                if (!File.Exists(outputPath) && !queue.Contains(file, taskIndex))
                 {
-                    logger.LogInformation("Queuing: {File}", file);
-                    queue.Enqueue(file);
+                    logger.LogInformation("[Task#{Index} {Name}] Queuing: {File}",
+                        taskIndex, opts.Name ?? taskIndex.ToString(), file);
+                    queue.Enqueue(file, taskIndex);
                 }
             }
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Scan failed for: {Path}", watchPath);
+            logger.LogWarning(ex, "[Task#{Index} {Name}] Scan failed for: {Path}",
+                taskIndex, opts.Name ?? taskIndex.ToString(), watchPath);
         }
     }
 
-    private void CleanStaleTempFiles(string watchPath, TOptions opts)
+    private void CleanStaleTempFiles(string watchPath, IPulsaOptions opts)
     {
         try
         {
@@ -115,12 +156,13 @@ public class FileWatcherWorker<TOptions>(
         }
     }
 
-    private void OnFileDetected(string filePath, TOptions opts)
+    private void OnFileDetected(string filePath, IPulsaOptions opts, int taskIndex)
     {
-        if (!File.Exists(opts.ResolveOutputPath(filePath)) && !queue.Contains(filePath))
+        if (!File.Exists(opts.ResolveOutputPath(filePath)) && !queue.Contains(filePath, taskIndex))
         {
-            logger.LogInformation("New file detected: {File}", filePath);
-            queue.Enqueue(filePath);
+            logger.LogInformation("[Task#{Index} {Name}] New file detected: {File}",
+                taskIndex, opts.Name ?? taskIndex.ToString(), filePath);
+            queue.Enqueue(filePath, taskIndex);
         }
     }
 }

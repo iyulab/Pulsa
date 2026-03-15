@@ -23,11 +23,22 @@ builder.Services.AddSerilog(cfg => cfg
         retainedFileCountLimit: 30,
         outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff} [{Level:u3}] {SourceContext}: {Message:lj}{NewLine}{Exception}"));
 
-builder.Services.Configure<UpdateOptions>(builder.Configuration.GetSection("Update"));
-builder.Services.Configure<ConvertOptions>(builder.Configuration.GetSection("Convert"));
+var tasks = builder.Configuration
+    .GetSection("Tasks")
+    .Get<List<ConvertTaskOptions>>() ?? [];
+
+if (tasks.Count == 0)
+{
+    Log.Fatal("No tasks configured. Add at least one task to 'Tasks' in appsettings.json.");
+    return;
+}
+
+builder.Services.AddSingleton<IReadOnlyList<ConvertTaskOptions>>(tasks);
+builder.Services.AddSingleton<IReadOnlyList<IPulsaOptions>>(tasks.Cast<IPulsaOptions>().ToList());
 builder.Services.AddSingleton<FileQueue>();
+builder.Services.Configure<UpdateOptions>(builder.Configuration.GetSection("Update"));
 builder.Services.AddHostedService<UpdateService>();
-builder.Services.AddHostedService<FileWatcherWorker<ConvertOptions>>();
+builder.Services.AddHostedService<FileWatcherWorker>();
 builder.Services.AddHostedService<ConvertWorker>();
 
 var host = builder.Build();
