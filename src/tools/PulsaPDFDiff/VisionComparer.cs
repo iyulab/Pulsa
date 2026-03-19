@@ -13,7 +13,11 @@ public class VisionComparer(ILogger<VisionComparer> logger)
         CancellationToken ct = default)
     {
         var credential = new System.ClientModel.ApiKeyCredential(options.ApiKey);
-        var client = new OpenAIClient(credential)
+        var clientOptions = new OpenAIClientOptions
+        {
+            NetworkTimeout = TimeSpan.FromMinutes(10),
+        };
+        var client = new OpenAIClient(credential, clientOptions)
             .GetChatClient(options.Model)
             .AsIChatClient();
 
