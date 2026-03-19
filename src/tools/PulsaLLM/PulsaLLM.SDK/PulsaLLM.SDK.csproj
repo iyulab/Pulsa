@@ -1,5 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <PropertyGroup>
+    <Version>0.1.0</Version>
+    <Description>Pulsa LLM SDK for language model inference</Description>
+    <PackageTags>pulsa;llm;language-model;ai</PackageTags>
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\..\..\Pulsa\Pulsa.csproj" />
     <PackageReference Include="LMSupply.Generator" />

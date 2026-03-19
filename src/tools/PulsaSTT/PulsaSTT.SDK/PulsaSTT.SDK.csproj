@@ -1,5 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <PropertyGroup>
+    <Version>0.1.0</Version>
+    <Description>Pulsa STT (Speech-to-Text) SDK for speech transcription</Description>
+    <PackageTags>pulsa;stt;speech-to-text;whisper</PackageTags>
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\..\..\Pulsa\Pulsa.csproj" />
     <PackageReference Include="LMSupply.Transcriber" />

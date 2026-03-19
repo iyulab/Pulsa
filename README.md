@@ -1,6 +1,19 @@
 # Pulsa
 
+[![Build](https://github.com/iyulab/Pulsa/actions/workflows/build.yml/badge.svg)](https://github.com/iyulab/Pulsa/actions/workflows/build.yml)
+[![NuGet](https://github.com/iyulab/Pulsa/actions/workflows/nuget-publish.yml/badge.svg)](https://github.com/iyulab/Pulsa/actions/workflows/nuget-publish.yml)
+
 문서 처리 도구 플랫폼. 파일 감시 기반 자동화 도구와 웹 기반 인터랙티브 도구를 함께 제공합니다.
+
+### NuGet Packages
+
+| Package | Version |
+|---------|---------|
+| Pulsa | [![NuGet](https://img.shields.io/nuget/v/Pulsa.svg)](https://www.nuget.org/packages/Pulsa) |
+| PulsaSTT.SDK | [![NuGet](https://img.shields.io/nuget/v/PulsaSTT.SDK.svg)](https://www.nuget.org/packages/PulsaSTT.SDK) |
+| PulsaLLM.SDK | [![NuGet](https://img.shields.io/nuget/v/PulsaLLM.SDK.svg)](https://www.nuget.org/packages/PulsaLLM.SDK) |
+| PulsaAudioConvert.SDK | [![NuGet](https://img.shields.io/nuget/v/PulsaAudioConvert.SDK.svg)](https://www.nuget.org/packages/PulsaAudioConvert.SDK) |
+| PulsaPDFDiff.SDK | [![NuGet](https://img.shields.io/nuget/v/PulsaPDFDiff.SDK.svg)](https://www.nuget.org/packages/PulsaPDFDiff.SDK) |
 
 ## Apps
 

@@ -8,3 +8,5 @@ claudedocs/
 test-llm/
 CLAUDE.md
 .playwright-mcp/
+local-sample-files/
+appsettings.user.json

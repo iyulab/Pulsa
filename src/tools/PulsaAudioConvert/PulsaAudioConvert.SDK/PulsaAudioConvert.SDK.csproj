@@ -1,5 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <PropertyGroup>
+    <Version>0.1.0</Version>
+    <Description>Pulsa Audio Convert SDK for audio format conversion</Description>
+    <PackageTags>pulsa;audio;convert;ffmpeg</PackageTags>
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\..\..\Pulsa\Pulsa.csproj" />
   </ItemGroup>

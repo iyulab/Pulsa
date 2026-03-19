@@ -19,6 +19,10 @@ jobs:
           - src/tools/PulsaAudioConvert/PulsaAudioConvert.Worker/PulsaAudioConvert.Worker.csproj
           - src/tools/PulsaLLM/PulsaLLM.Worker/PulsaLLM.Worker.csproj
           - src/tools/PulsaPDFDiff/PulsaPDFDiff.WebApp/PulsaPDFDiff.WebApp.csproj
+          - src/tools/PulsaSTT/PulsaSTT.SDK/PulsaSTT.SDK.csproj
+          - src/tools/PulsaLLM/PulsaLLM.SDK/PulsaLLM.SDK.csproj
+          - src/tools/PulsaAudioConvert/PulsaAudioConvert.SDK/PulsaAudioConvert.SDK.csproj
+          - src/tools/PulsaPDFDiff/PulsaPDFDiff.SDK/PulsaPDFDiff.SDK.csproj
     steps:
       - uses: actions/checkout@v4
 

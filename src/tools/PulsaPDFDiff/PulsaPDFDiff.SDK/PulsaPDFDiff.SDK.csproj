@@ -1,5 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <PropertyGroup>
+    <Version>0.1.0</Version>
+    <Description>Pulsa PDF Diff SDK for PDF comparison and analysis</Description>
+    <PackageTags>pulsa;pdf;diff;compare</PackageTags>
+  </PropertyGroup>
+
   <ItemGroup>
     <Using Include="Microsoft.Extensions.Configuration" />
     <Using Include="Microsoft.Extensions.Logging" />

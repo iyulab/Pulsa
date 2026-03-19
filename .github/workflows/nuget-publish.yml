@@ -1,0 +1,181 @@
+name: NuGet Publish
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/Pulsa/Pulsa.csproj'
+      - 'src/tools/PulsaSTT/PulsaSTT.SDK/PulsaSTT.SDK.csproj'
+      - 'src/tools/PulsaLLM/PulsaLLM.SDK/PulsaLLM.SDK.csproj'
+      - 'src/tools/PulsaAudioConvert/PulsaAudioConvert.SDK/PulsaAudioConvert.SDK.csproj'
+      - 'src/tools/PulsaPDFDiff/PulsaPDFDiff.SDK/PulsaPDFDiff.SDK.csproj'
+  workflow_dispatch:
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      pulsa: ${{ steps.pulsa.outputs.publish }}
+      stt-sdk: ${{ steps.stt-sdk.outputs.publish }}
+      llm-sdk: ${{ steps.llm-sdk.outputs.publish }}
+      audio-sdk: ${{ steps.audio-sdk.outputs.publish }}
+      pdfdiff-sdk: ${{ steps.pdfdiff-sdk.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Check Pulsa
+        id: pulsa
+        shell: bash
+        run: |
+          csproj="src/Pulsa/Pulsa.csproj"
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ] || git diff HEAD~1 HEAD --name-only | grep -q "$csproj"; then
+            version=$(sed -n 's/.*<Version>\([^<]*\)<.*/\1/p' "$csproj")
+            echo "publish=true" >> $GITHUB_OUTPUT
+            echo "version=${version}" >> $GITHUB_OUTPUT
+          else
+            echo "publish=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Check PulsaSTT.SDK
+        id: stt-sdk
+        shell: bash
+        run: |
+          csproj="src/tools/PulsaSTT/PulsaSTT.SDK/PulsaSTT.SDK.csproj"
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ] || git diff HEAD~1 HEAD --name-only | grep -q "$csproj"; then
+            version=$(sed -n 's/.*<Version>\([^<]*\)<.*/\1/p' "$csproj")
+            echo "publish=true" >> $GITHUB_OUTPUT
+            echo "version=${version}" >> $GITHUB_OUTPUT
+          else
+            echo "publish=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Check PulsaLLM.SDK
+        id: llm-sdk
+        shell: bash
+        run: |
+          csproj="src/tools/PulsaLLM/PulsaLLM.SDK/PulsaLLM.SDK.csproj"
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ] || git diff HEAD~1 HEAD --name-only | grep -q "$csproj"; then
+            version=$(sed -n 's/.*<Version>\([^<]*\)<.*/\1/p' "$csproj")
+            echo "publish=true" >> $GITHUB_OUTPUT
+            echo "version=${version}" >> $GITHUB_OUTPUT
+          else
+            echo "publish=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Check PulsaAudioConvert.SDK
+        id: audio-sdk
+        shell: bash
+        run: |
+          csproj="src/tools/PulsaAudioConvert/PulsaAudioConvert.SDK/PulsaAudioConvert.SDK.csproj"
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ] || git diff HEAD~1 HEAD --name-only | grep -q "$csproj"; then
+            version=$(sed -n 's/.*<Version>\([^<]*\)<.*/\1/p' "$csproj")
+            echo "publish=true" >> $GITHUB_OUTPUT
+            echo "version=${version}" >> $GITHUB_OUTPUT
+          else
+            echo "publish=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Check PulsaPDFDiff.SDK
+        id: pdfdiff-sdk
+        shell: bash
+        run: |
+          csproj="src/tools/PulsaPDFDiff/PulsaPDFDiff.SDK/PulsaPDFDiff.SDK.csproj"
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ] || git diff HEAD~1 HEAD --name-only | grep -q "$csproj"; then
+            version=$(sed -n 's/.*<Version>\([^<]*\)<.*/\1/p' "$csproj")
+            echo "publish=true" >> $GITHUB_OUTPUT
+            echo "version=${version}" >> $GITHUB_OUTPUT
+          else
+            echo "publish=false" >> $GITHUB_OUTPUT
+          fi
+
+  publish-pulsa:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.pulsa == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+          dotnet-quality: 'preview'
+
+      - name: Pack
+        run: dotnet pack src/Pulsa/Pulsa.csproj -c Release -o nupkgs
+
+      - name: Push to NuGet
+        run: dotnet nuget push nupkgs/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
+
+  publish-stt-sdk:
+    needs: [detect-changes, publish-pulsa]
+    if: always() && needs.detect-changes.outputs.stt-sdk == 'true' && (needs.publish-pulsa.result == 'success' || needs.publish-pulsa.result == 'skipped')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+          dotnet-quality: 'preview'
+
+      - name: Pack
+        run: dotnet pack src/tools/PulsaSTT/PulsaSTT.SDK/PulsaSTT.SDK.csproj -c Release -o nupkgs
+
+      - name: Push to NuGet
+        run: dotnet nuget push nupkgs/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
+
+  publish-llm-sdk:
+    needs: [detect-changes, publish-pulsa]
+    if: always() && needs.detect-changes.outputs.llm-sdk == 'true' && (needs.publish-pulsa.result == 'success' || needs.publish-pulsa.result == 'skipped')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+          dotnet-quality: 'preview'
+
+      - name: Pack
+        run: dotnet pack src/tools/PulsaLLM/PulsaLLM.SDK/PulsaLLM.SDK.csproj -c Release -o nupkgs
+
+      - name: Push to NuGet
+        run: dotnet nuget push nupkgs/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
+
+  publish-audio-sdk:
+    needs: [detect-changes, publish-pulsa]
+    if: always() && needs.detect-changes.outputs.audio-sdk == 'true' && (needs.publish-pulsa.result == 'success' || needs.publish-pulsa.result == 'skipped')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+          dotnet-quality: 'preview'
+
+      - name: Pack
+        run: dotnet pack src/tools/PulsaAudioConvert/PulsaAudioConvert.SDK/PulsaAudioConvert.SDK.csproj -c Release -o nupkgs
+
+      - name: Push to NuGet
+        run: dotnet nuget push nupkgs/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
+
+  publish-pdfdiff-sdk:
+    needs: [detect-changes, publish-pulsa]
+    if: always() && needs.detect-changes.outputs.pdfdiff-sdk == 'true' && (needs.publish-pulsa.result == 'success' || needs.publish-pulsa.result == 'skipped')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+          dotnet-quality: 'preview'
+
+      - name: Pack
+        run: dotnet pack src/tools/PulsaPDFDiff/PulsaPDFDiff.SDK/PulsaPDFDiff.SDK.csproj -c Release -o nupkgs
+
+      - name: Push to NuGet
+        run: dotnet nuget push nupkgs/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
