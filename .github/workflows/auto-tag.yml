@@ -23,11 +23,11 @@ jobs:
         id: stt
         shell: bash
         run: |
-          if ! git diff HEAD~1 HEAD --name-only | grep -q "src/PulsaSTT/PulsaSTT.csproj"; then
+          if ! git diff HEAD~1 HEAD --name-only | grep -q "src/tools/PulsaSTT/PulsaSTT.csproj"; then
             echo "changed=false" >> $GITHUB_OUTPUT
             exit 0
           fi
-          version=$(sed -n 's/.*<Version>\([^<]*\)<.*/\1/p' src/PulsaSTT/PulsaSTT.csproj)
+          version=$(sed -n 's/.*<Version>\([^<]*\)<.*/\1/p' src/tools/PulsaSTT/PulsaSTT.csproj)
           tag="stt-v${version}"
           if git ls-remote --tags origin "refs/tags/${tag}" | grep -q "${tag}"; then
             echo "changed=false" >> $GITHUB_OUTPUT
@@ -40,11 +40,11 @@ jobs:
         id: llm
         shell: bash
         run: |
-          if ! git diff HEAD~1 HEAD --name-only | grep -q "src/PulsaLLM/PulsaLLM.csproj"; then
+          if ! git diff HEAD~1 HEAD --name-only | grep -q "src/tools/PulsaLLM/PulsaLLM.csproj"; then
             echo "changed=false" >> $GITHUB_OUTPUT
             exit 0
           fi
-          version=$(sed -n 's/.*<Version>\([^<]*\)<.*/\1/p' src/PulsaLLM/PulsaLLM.csproj)
+          version=$(sed -n 's/.*<Version>\([^<]*\)<.*/\1/p' src/tools/PulsaLLM/PulsaLLM.csproj)
           tag="llm-v${version}"
           if git ls-remote --tags origin "refs/tags/${tag}" | grep -q "${tag}"; then
             echo "changed=false" >> $GITHUB_OUTPUT
@@ -57,11 +57,11 @@ jobs:
         id: audio
         shell: bash
         run: |
-          if ! git diff HEAD~1 HEAD --name-only | grep -q "src/PulsaAudioConvert/PulsaAudioConvert.csproj"; then
+          if ! git diff HEAD~1 HEAD --name-only | grep -q "src/tools/PulsaAudioConvert/PulsaAudioConvert.csproj"; then
             echo "changed=false" >> $GITHUB_OUTPUT
             exit 0
           fi
-          version=$(sed -n 's/.*<Version>\([^<]*\)<.*/\1/p' src/PulsaAudioConvert/PulsaAudioConvert.csproj)
+          version=$(sed -n 's/.*<Version>\([^<]*\)<.*/\1/p' src/tools/PulsaAudioConvert/PulsaAudioConvert.csproj)
           tag="audio-convert-v${version}"
           if git ls-remote --tags origin "refs/tags/${tag}" | grep -q "${tag}"; then
             echo "changed=false" >> $GITHUB_OUTPUT

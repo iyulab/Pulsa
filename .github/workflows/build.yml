@@ -15,9 +15,9 @@ jobs:
     strategy:
       matrix:
         project:
-          - src/PulsaSTT/PulsaSTT.csproj
-          - src/PulsaAudioConvert/PulsaAudioConvert.csproj
-          - src/PulsaLLM/PulsaLLM.csproj
+          - src/tools/PulsaSTT/PulsaSTT.csproj
+          - src/tools/PulsaAudioConvert/PulsaAudioConvert.csproj
+          - src/tools/PulsaLLM/PulsaLLM.csproj
     steps:
       - uses: actions/checkout@v4
 
