@@ -107,6 +107,7 @@ public class UpdateService(
                 timeout /t 1 /nobreak >nul
                 goto wait
             )
+            timeout /t 2 /nobreak >nul
             robocopy "{sourceDir}" "{appDir}" /s /xf appsettings.json appsettings.*.json /xd logs _update >nul
             rmdir /s /q "{updateDir}" 2>nul
             start "" "{exePath}"
