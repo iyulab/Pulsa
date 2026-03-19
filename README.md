@@ -4,62 +4,62 @@
 
 ## Apps
 
-자동화 도구(watch-run)와 웹 기반 인터랙티브 도구를 모두 지원합니다.
+| App | 유형 | 설명 | 입력 | 출력 | 태그 |
+|-----|------|------|------|------|------|
+| **PulsaAudioConvert** | 자동화 | 오디오 파일 포맷 변환 | `*.m4a` | `*.mp3` | `audio-convert-v*` |
+| **PulsaSTT** | 자동화 | 음성 파일을 텍스트로 변환 | `*.mp3` | `*.stt.txt`, `*.vtt`, `*.srt` | `stt-v*` |
+| **PulsaLLM** | 자동화 | LLM 기반 텍스트 처리 | `*.stt.txt` | `*.{prompt}.md` | `llm-v*` |
+| **PulsaPDFDiff** | 웹 | PDF 비교 (Vision LLM) | PDF × 2 | 마크다운 리포트 | `pdfdiff-v*` |
 
-| App | 설명 | 입력 | 출력 | 릴리즈 태그 |
-|-----|------|------|------|------------|
-| **PulsaAudioConvert** | 오디오 파일 포맷 변환 | `*.m4a` | `*.mp3` | `audio-convert-v*` |
-| **PulsaSTT** | 음성 파일을 텍스트로 변환 | `*.mp3` | `*.stt.txt`, `*.vtt`, `*.srt` | `stt-v*` |
-| **PulsaLLM** | LLM 기반 텍스트 처리 | `*.stt.txt` | `*.{prompt}.md` | `llm-v*` |
-| **PulsaPDFDiff** | 웹 기반 PDF 비교 도구 | PDF × 2 | 마크다운 리포트 | `pdfdiff-v*` |
-
-### 파이프라인 예시
+### 자동화 파이프라인
 
 같은 폴더를 감시하도록 설정하면 자동으로 파이프라인이 구성됩니다:
 
 ```
-*.m4a → [PulsaAudioConvert] → *.mp3 → [PulsaSTT] → *.stt.txt → [PulsaLLM] → *.summarize.md
-                                                   → *.vtt
-                                                   → *.srt
+*.m4a → [AudioConvert] → *.mp3 → [STT] → *.stt.txt → [LLM] → *.summarize.md
+                                          → *.vtt
+                                          → *.srt
 ```
 
-## 멀티 태스크
+## 설치
 
-각 앱은 하나의 프로세스에서 여러 작업을 동시에 처리할 수 있습니다. `Tasks` 배열에 작업을 정의하면 각 작업마다 독립적으로 폴더를 감시하고, 공유 큐를 통해 순차적으로 처리합니다.
+[Releases](https://github.com/iyulab/Pulsa/releases) 페이지에서 앱별 zip 파일을 다운로드하여 압축 해제합니다. .NET 설치 없이 바로 실행 가능합니다 (self-contained).
 
-```json
-{
-  "Tasks": [
-    { "Name": "meetings", "WatchPath": "D:/recordings/meetings", "FilePattern": "*.mp3" },
-    { "Name": "lectures", "WatchPath": "D:/recordings/lectures", "FilePattern": "*.mp3" }
-  ]
-}
-```
+각 앱은 시작 시 GitHub Releases를 확인하여 새 버전이 있으면 자동으로 업데이트합니다.
 
 ## 프로젝트 구조
 
 ```
 src/
-├── Pulsa/                     # SDK — 공유 라이브러리
+├── Pulsa/                                  # 중앙 SDK (FileWatcher, UpdateService 등)
 └── tools/
-    ├── PulsaAudioConvert/     # 오디오 변환 (자동화)
-    ├── PulsaSTT/              # 음성 인식 (자동화)
-    ├── PulsaLLM/              # LLM 텍스트 처리 (자동화)
-    └── PulsaPDFDiff/          # PDF 비교 (웹)
+    ├── PulsaAudioConvert/
+    │   ├── PulsaAudioConvert.SDK/           # 오디오 변환 SDK
+    │   └── PulsaAudioConvert.Worker/        # 자동화 앱
+    ├── PulsaSTT/
+    │   ├── PulsaSTT.SDK/                    # 음성인식 SDK
+    │   └── PulsaSTT.Worker/                 # 자동화 앱
+    ├── PulsaLLM/
+    │   ├── PulsaLLM.SDK/                    # LLM 처리 SDK
+    │   └── PulsaLLM.Worker/                 # 자동화 앱
+    └── PulsaPDFDiff/
+        ├── PulsaPDFDiff.SDK/                # PDF 비교 SDK
+        └── PulsaPDFDiff.WebApp/             # 웹 앱
 ```
 
-## 설치
+각 도구는 **SDK**(재사용 가능한 라이브러리)와 **App**(실행 앱)으로 분리됩니다:
+- **SDK** — NuGet 패키지 배포 대상. 다른 프로젝트에서 참조하여 사용 가능
+- **Worker** — 파일 감시 기반 자동화 실행 앱 (GitHub Releases 배포)
+- **WebApp** — 웹 기반 사용자 인터랙션 앱 (GitHub Releases 배포)
 
-[Releases](https://github.com/iyulab/Pulsa/releases) 페이지에서 앱별 zip 파일을 다운로드하여 원하는 경로에 압축 해제합니다.
+## 앱별 문서
 
-## 설정
+- [PulsaAudioConvert](src/tools/PulsaAudioConvert/PulsaAudioConvert.Worker/README.md)
+- [PulsaSTT](src/tools/PulsaSTT/PulsaSTT.Worker/README.md)
+- [PulsaLLM](src/tools/PulsaLLM/PulsaLLM.Worker/README.md)
+- [PulsaPDFDiff](docs/PulsaPDFDiff.md)
 
-각 앱의 `appsettings.json`에서 설정을 변경합니다. 자세한 설정은 각 모듈의 README를 참고하세요.
-
-- [PulsaAudioConvert](src/tools/PulsaAudioConvert/README.md)
-- [PulsaSTT](src/tools/PulsaSTT/README.md)
-- [PulsaLLM](src/tools/PulsaLLM/README.md)
-- [PulsaPDFDiff](src/tools/PulsaPDFDiff/README.md)
+## 빠른 설정 예시
 
 ### PulsaAudioConvert
 
@@ -72,8 +72,7 @@ src/
       "FilePattern": "*.m4a",
       "OutputExtension": ".mp3",
       "AudioCodec": "libmp3lame",
-      "AudioBitrate": 192,
-      "DeleteSource": false
+      "AudioBitrate": 192
     }
   ]
 }
@@ -101,9 +100,9 @@ src/
 ```json
 {
   "Provider": {
-    "Type": "openai-compatible",
-    "Host": "http://localhost:1234",
-    "Model": "local-model"
+    "Type": "openai",
+    "Model": "gpt-4o",
+    "ApiKey": "sk-..."
   },
   "Tasks": [
     {
@@ -116,38 +115,48 @@ src/
 }
 ```
 
-Provider 종류: `openai`, `openai-compatible`
+### PulsaPDFDiff
 
-OpenAI 사용 시:
+```bash
+PulsaPDFDiff.WebApp.exe
+# 브라우저에서 http://localhost:5000 접속
+# 설정에서 OpenAI API Key 입력 → PDF 업로드 → 비교 실행
+```
+
+## 멀티 태스크 (자동화 앱)
+
+자동화 앱들은 하나의 프로세스에서 여러 작업을 동시에 처리합니다:
+
 ```json
 {
-  "Provider": {
-    "Type": "openai",
-    "Model": "gpt-4o",
-    "ApiKey": "sk-..."
-  }
+  "Tasks": [
+    { "Name": "meetings", "WatchPath": "D:/recordings/meetings", "FilePattern": "*.mp3" },
+    { "Name": "lectures", "WatchPath": "D:/recordings/lectures", "FilePattern": "*.mp3" }
+  ]
 }
 ```
 
 ## 자동 업데이트
 
-각 앱은 시작 시 GitHub Releases를 확인하여 새 버전이 있으면 자동으로 업데이트합니다. `appsettings.json`에서 비활성화할 수 있습니다.
+모든 앱은 시작 시 GitHub Releases에서 새 버전을 확인하고 자동 업데이트합니다. 비활성화:
 
 ```json
 {
-  "Update": {
-    "Enabled": false
-  }
+  "Update": { "Enabled": false }
 }
 ```
 
 ## 빌드
 
 ```bash
-dotnet build src/tools/PulsaAudioConvert/PulsaAudioConvert.csproj -c Release
-dotnet build src/tools/PulsaSTT/PulsaSTT.csproj -c Release
-dotnet build src/tools/PulsaLLM/PulsaLLM.csproj -c Release
-dotnet build src/tools/PulsaPDFDiff/PulsaPDFDiff.csproj -c Release
+# 전체
+dotnet build Pulsa.slnx -c Release
+
+# 개별
+dotnet build src/tools/PulsaAudioConvert/PulsaAudioConvert.Worker/PulsaAudioConvert.Worker.csproj -c Release
+dotnet build src/tools/PulsaSTT/PulsaSTT.Worker/PulsaSTT.Worker.csproj -c Release
+dotnet build src/tools/PulsaLLM/PulsaLLM.Worker/PulsaLLM.Worker.csproj -c Release
+dotnet build src/tools/PulsaPDFDiff/PulsaPDFDiff.WebApp/PulsaPDFDiff.WebApp.csproj -c Release
 ```
 
 ## License
