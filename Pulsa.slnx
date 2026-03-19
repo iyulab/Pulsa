@@ -3,4 +3,5 @@
   <Project Path="src/tools/PulsaAudioConvert/PulsaAudioConvert.csproj" />
   <Project Path="src/tools/PulsaSTT/PulsaSTT.csproj" />
   <Project Path="src/tools/PulsaLLM/PulsaLLM.csproj" />
+  <Project Path="src/tools/PulsaPDFDiff/PulsaPDFDiff.csproj" />
 </Solution>
