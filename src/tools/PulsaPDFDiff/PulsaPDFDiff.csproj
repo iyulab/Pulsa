@@ -7,6 +7,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\Pulsa\Pulsa.csproj" />
     <PackageReference Include="Docnet.Core" />
+    <PackageReference Include="System.Drawing.Common" />
     <PackageReference Include="Microsoft.Extensions.AI" />
     <PackageReference Include="Microsoft.Extensions.AI.OpenAI" />
     <PackageReference Include="Serilog.Extensions.Hosting" />
