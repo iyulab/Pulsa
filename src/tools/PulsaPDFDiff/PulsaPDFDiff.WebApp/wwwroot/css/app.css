@@ -107,3 +107,37 @@ main { max-width: 960px; margin: 2rem auto; padding: 0 1rem; }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 .loading-overlay p { margin-top: 1rem; color: #666; }
+
+/* Mapping Table */
+.mapping-section { margin-bottom: 1.5rem; }
+.mapping-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem; }
+.mapping-header h3 { font-size: 1rem; font-weight: 600; }
+.small-btn {
+    padding: 0.3rem 0.75rem; border: 1px solid #ccc;
+    border-radius: 4px; background: #fff; cursor: pointer; font-size: 0.85rem;
+}
+.small-btn:hover { background: #f0f0f0; }
+.mapping-hint { font-size: 0.85rem; color: #e67e22; background: #fef9e7; padding: 0.5rem 0.75rem; border-radius: 4px; margin-bottom: 0.5rem; }
+.mapping-table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 6px; overflow: hidden; border: 1px solid #e0e0e0; }
+.mapping-table th { background: #f8f8f8; font-weight: 600; padding: 0.5rem 0.75rem; text-align: center; border-bottom: 1px solid #e0e0e0; }
+.mapping-table td { padding: 0.4rem 0.75rem; text-align: center; border-bottom: 1px solid #f0f0f0; }
+.mapping-table select { padding: 0.3rem 0.5rem; border: 1px solid #ccc; border-radius: 4px; }
+.mapping-table .remove-btn {
+    background: none; border: none; color: #e55; cursor: pointer; font-size: 1.1rem; padding: 0.2rem 0.5rem;
+}
+.mapping-table .remove-btn:hover { color: #c33; }
+
+/* Progress Bar */
+.progress-bar-container { margin-top: 1rem; margin-bottom: 1rem; }
+.progress-info { display: flex; justify-content: space-between; font-size: 0.85rem; color: #666; margin-bottom: 0.3rem; }
+.progress-track { height: 8px; background: #e0e0e0; border-radius: 4px; overflow: hidden; }
+.progress-fill { height: 100%; background: #4a6cf7; border-radius: 4px; transition: width 0.3s ease; width: 0%; }
+
+/* Token Summary */
+.token-summary { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid #e0e0e0; }
+.token-summary h3 { font-size: 0.95rem; font-weight: 600; margin-bottom: 0.5rem; }
+.token-summary table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.token-summary th, .token-summary td { border: 1px solid #e0e0e0; padding: 0.4rem 0.75rem; text-align: right; }
+.token-summary th { background: #f8f8f8; text-align: center; font-weight: 600; }
+.token-summary th:first-child, .token-summary td:first-child { text-align: left; }
+.token-summary tfoot td { font-weight: 700; background: #f0f4ff; }

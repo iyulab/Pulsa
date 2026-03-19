@@ -29,6 +29,25 @@
             </div>
         </section>
 
+        <!-- Page Mapping Table -->
+        <section class="mapping-section" id="mappingSection" hidden>
+            <div class="mapping-header">
+                <h3>페이지 매핑</h3>
+                <button id="addMappingBtn" class="small-btn">+ 행 추가</button>
+            </div>
+            <p class="mapping-hint" id="mappingHint" hidden>매핑이 없으면 전체 페이지를 한 번에 비교합니다.</p>
+            <table class="mapping-table" id="mappingTable">
+                <thead>
+                    <tr>
+                        <th>기준 페이지</th>
+                        <th>작업 페이지</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody id="mappingBody"></tbody>
+            </table>
+        </section>
+
         <section class="prompt-section">
             <div class="prompt-header">
                 <label for="promptSelect">프롬프트:</label>
@@ -40,9 +59,28 @@
 
         <button id="compareBtn" class="primary-btn" disabled>비교 실행</button>
 
+        <!-- Progress -->
+        <div class="progress-bar-container" id="progressContainer" hidden>
+            <div class="progress-info">
+                <span id="progressText">0 / 0 페이지 완료</span>
+                <span id="progressTokens"></span>
+            </div>
+            <div class="progress-track">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+        </div>
+
         <section class="report-section" id="reportSection" hidden>
             <h2>교정 리포트</h2>
             <div id="reportContent"></div>
+            <div class="token-summary" id="tokenSummary" hidden>
+                <h3>토큰 사용량</h3>
+                <table>
+                    <thead><tr><th>구분</th><th>프롬프트</th><th>완료</th><th>합계</th></tr></thead>
+                    <tbody id="tokenBody"></tbody>
+                    <tfoot id="tokenFoot"></tfoot>
+                </table>
+            </div>
         </section>
     </main>
 
@@ -64,11 +102,6 @@
                 <button id="closeSettingsBtn">취소</button>
             </div>
         </div>
-    </div>
-
-    <div class="loading-overlay" id="loadingOverlay" hidden>
-        <div class="spinner"></div>
-        <p>LLM 비교 분석 중...</p>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>

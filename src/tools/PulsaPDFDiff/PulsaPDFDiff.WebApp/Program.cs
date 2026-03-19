@@ -7,6 +7,11 @@ Console.OutputEncoding = Encoding.UTF8;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.Limits.MaxRequestBodySize = 100 * 1024 * 1024; // 100 MB
+});
+
 builder.Configuration.AddJsonFile("appsettings.user.json", optional: true, reloadOnChange: true);
 
 var logsPath = builder.Configuration["LogsPath"] ?? "logs";
@@ -27,6 +32,7 @@ var promptsDir = Path.Combine(AppContext.BaseDirectory, "prompts");
 builder.Services.AddSingleton(new PromptManager(promptsDir));
 builder.Services.AddSingleton(new SettingsManager(builder.Environment.ContentRootPath));
 builder.Services.AddSingleton<VisionComparer>();
+builder.Services.AddSingleton<PdfSessionStore>();
 
 builder.Services.Configure<UpdateOptions>(builder.Configuration.GetSection("Update"));
 builder.Services.AddHostedService<UpdateService>();
@@ -35,7 +41,95 @@ var app = builder.Build();
 
 app.UseStaticFiles();
 
-// POST /api/compare
+// POST /api/upload — Upload a PDF and get session ID + page count
+app.MapPost("/api/upload", async (
+    HttpRequest request,
+    PdfSessionStore store,
+    CancellationToken ct) =>
+{
+    var form = await request.ReadFormAsync(ct);
+    var file = form.Files["file"];
+
+    if (file is null)
+        return Results.BadRequest(new { error = "A 'file' PDF is required." });
+
+    using var stream = file.OpenReadStream();
+    var images = PdfImageConverter.ConvertToBase64Images(stream);
+    var session = store.Create(images);
+
+    return Results.Ok(new { id = session.Id, pageCount = session.PageCount });
+});
+
+// POST /api/compare-page — Compare a single page pair
+app.MapPost("/api/compare-page", async (
+    HttpRequest request,
+    VisionComparer comparer,
+    PdfSessionStore store,
+    PromptManager prompts,
+    SettingsManager settings,
+    IConfiguration config,
+    CancellationToken ct) =>
+{
+    var form = await request.ReadFormAsync(ct);
+    var refId = form["refId"].FirstOrDefault();
+    var tgtId = form["tgtId"].FirstOrDefault();
+    var refPageStr = form["refPage"].FirstOrDefault();
+    var tgtPageStr = form["tgtPage"].FirstOrDefault();
+    var promptName = form["prompt"].FirstOrDefault();
+    var customPrompt = form["customPrompt"].FirstOrDefault();
+
+    if (string.IsNullOrWhiteSpace(refId) || string.IsNullOrWhiteSpace(tgtId))
+        return Results.BadRequest(new { error = "Both 'refId' and 'tgtId' are required." });
+
+    if (!int.TryParse(refPageStr, out var refPage) || !int.TryParse(tgtPageStr, out var tgtPage))
+        return Results.BadRequest(new { error = "Valid 'refPage' and 'tgtPage' numbers are required." });
+
+    var refSession = store.Get(refId);
+    var tgtSession = store.Get(tgtId);
+    if (refSession is null || tgtSession is null)
+        return Results.BadRequest(new { error = "Session expired or not found. Please re-upload files." });
+
+    if (refPage < 1 || refPage > refSession.PageCount)
+        return Results.BadRequest(new { error = $"refPage must be between 1 and {refSession.PageCount}." });
+    if (tgtPage < 1 || tgtPage > tgtSession.PageCount)
+        return Results.BadRequest(new { error = $"tgtPage must be between 1 and {tgtSession.PageCount}." });
+
+    string systemPrompt;
+    if (!string.IsNullOrWhiteSpace(customPrompt))
+    {
+        systemPrompt = customPrompt;
+    }
+    else if (!string.IsNullOrWhiteSpace(promptName))
+    {
+        systemPrompt = await prompts.GetAsync(promptName, ct)
+            ?? throw new InvalidOperationException($"Prompt not found: {promptName}");
+    }
+    else
+    {
+        return Results.BadRequest(new { error = "Either 'prompt' or 'customPrompt' is required." });
+    }
+
+    var opts = settings.GetSettings(config);
+    if (string.IsNullOrWhiteSpace(opts.ApiKey))
+        return Results.BadRequest(new { error = "OpenAI API key not configured. Set it in Settings." });
+
+    var result = await comparer.ComparePageAsync(
+        opts,
+        refSession.Images[refPage - 1],
+        tgtSession.Images[tgtPage - 1],
+        refPage, tgtPage,
+        systemPrompt, ct);
+
+    return Results.Ok(new
+    {
+        text = result.Text,
+        promptTokens = result.PromptTokens,
+        completionTokens = result.CompletionTokens,
+        totalTokens = result.TotalTokens
+    });
+});
+
+// POST /api/compare (legacy full-document comparison, now returns tokens)
 app.MapPost("/api/compare", async (
     HttpRequest request,
     VisionComparer comparer,
@@ -79,9 +173,9 @@ app.MapPost("/api/compare", async (
     var refImages = PdfImageConverter.ConvertToBase64Images(refStream);
     var tgtImages = PdfImageConverter.ConvertToBase64Images(tgtStream);
 
-    var report = await comparer.CompareAsync(opts, refImages, tgtImages, systemPrompt, ct);
+    var result = await comparer.CompareAsync(opts, refImages, tgtImages, systemPrompt, ct);
 
-    return Results.Text(report, "text/markdown; charset=utf-8");
+    return Results.Text(result.Text, "text/markdown; charset=utf-8");
 });
 
 // GET /api/prompts
