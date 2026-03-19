@@ -14,19 +14,27 @@ public class UpdateService(
     IHostApplicationLifetime lifetime,
     ILogger<UpdateService> logger) : IHostedService
 {
-    public async Task StartAsync(CancellationToken ct)
+    public Task StartAsync(CancellationToken ct)
     {
         var opts = options.Value;
-        if (!opts.Enabled) return;
+        if (!opts.Enabled) return Task.CompletedTask;
 
-        try
-        {
-            await CheckAndApplyAsync(opts, ct);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Update check failed, continuing with current version");
-        }
+        // Run update check after the host has fully started,
+        // so StopApplication() won't cancel Kestrel's bind.
+        lifetime.ApplicationStarted.Register(() =>
+            Task.Run(async () =>
+            {
+                try
+                {
+                    await CheckAndApplyAsync(opts, CancellationToken.None);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Update check failed, continuing with current version");
+                }
+            }));
+
+        return Task.CompletedTask;
     }
 
     public Task StopAsync(CancellationToken ct) => Task.CompletedTask;
