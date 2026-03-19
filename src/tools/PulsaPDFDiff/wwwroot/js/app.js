@@ -24,6 +24,13 @@
     const loadingOverlay = document.getElementById('loadingOverlay');
 
     function setupDropZone(zone, input, nameEl, setFile) {
+        const hintEl = zone.querySelector('.drop-hint');
+        function applyFile(file) {
+            setFile(file);
+            nameEl.textContent = file.name;
+            zone.classList.add('has-file');
+            if (hintEl) hintEl.textContent = '클릭하여 파일 변경';
+        }
         zone.addEventListener('click', () => input.click());
         zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('dragover'); });
         zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
@@ -31,11 +38,11 @@
             e.preventDefault();
             zone.classList.remove('dragover');
             const file = e.dataTransfer.files[0];
-            if (file && file.type === 'application/pdf') { setFile(file); nameEl.textContent = file.name; zone.classList.add('has-file'); }
+            if (file && file.type === 'application/pdf') applyFile(file);
         });
         input.addEventListener('change', () => {
             const file = input.files[0];
-            if (file) { setFile(file); nameEl.textContent = file.name; zone.classList.add('has-file'); }
+            if (file) applyFile(file);
         });
     }
 

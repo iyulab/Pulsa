@@ -59,7 +59,7 @@ main { max-width: 960px; margin: 2rem auto; padding: 0 1rem; }
     cursor: pointer; transition: background 0.2s;
 }
 .primary-btn:hover:not(:disabled) { background: #3b5de7; }
-.primary-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.primary-btn:disabled { opacity: 0.4; cursor: not-allowed; background: #9aa5c0; }
 
 .report-section {
     margin-top: 2rem; background: #fff;
@@ -76,6 +76,7 @@ main { max-width: 960px; margin: 2rem auto; padding: 0 1rem; }
     position: fixed; inset: 0; background: rgba(0,0,0,0.5);
     display: flex; align-items: center; justify-content: center; z-index: 100;
 }
+.modal-overlay[hidden] { display: none; }
 .modal {
     background: #fff; border-radius: 8px; padding: 2rem;
     min-width: 400px; max-width: 90vw;
@@ -98,6 +99,7 @@ main { max-width: 960px; margin: 2rem auto; padding: 0 1rem; }
     display: flex; flex-direction: column;
     align-items: center; justify-content: center; z-index: 200;
 }
+.loading-overlay[hidden] { display: none; }
 .spinner {
     width: 40px; height: 40px;
     border: 4px solid #e0e0e0; border-top-color: #4a6cf7;
