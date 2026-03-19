@@ -46,3 +46,15 @@ jobs:
           tag_name: stt-v${{ steps.version.outputs.version }}
           name: PulsaSTT v${{ steps.version.outputs.version }}
           files: publish/PulsaSTT-win-x64.zip
+
+      - name: Cleanup old releases
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release list --json tagName -q '.[].tagName' \
+            | grep '^stt-v' | sort -V | head -n -5 \
+            | while read tag; do
+                echo "Deleting release $tag"
+                gh release delete "$tag" --yes --cleanup-tag
+              done
