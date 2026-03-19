@@ -3,13 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PulsaPDFDiff</title>
+    <title>Pulsa PDF Diff</title>
     <link rel="icon" href="data:,">
     <link rel="stylesheet" href="/css/app.css">
 </head>
 <body>
     <header>
-        <h1>PulsaPDFDiff</h1>
+        <h1>Pulsa PDF Diff</h1>
         <button id="settingsBtn" title="설정">⚙</button>
     </header>
 
@@ -56,7 +56,8 @@
             </label>
             <label>
                 모델
-                <input type="text" id="modelInput" value="gpt-4o">
+                <select id="modelSelect"></select>
+                <input type="text" id="modelInput" value="gpt-4o" placeholder="모델명 직접 입력">
             </label>
             <div class="modal-actions">
                 <button id="saveSettingsBtn" class="primary-btn">저장</button>

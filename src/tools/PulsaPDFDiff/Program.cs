@@ -103,6 +103,23 @@ app.MapPut("/api/prompts/{name}", async (string name, HttpRequest request, Promp
     return Results.Ok();
 });
 
+// GET /api/models
+app.MapGet("/api/models", async (SettingsManager settings, IConfiguration config, CancellationToken ct) =>
+{
+    var opts = settings.GetSettings(config);
+    if (string.IsNullOrWhiteSpace(opts.ApiKey))
+        return Results.BadRequest(new { error = "API key not configured." });
+
+    using var http = new HttpClient();
+    http.DefaultRequestHeaders.Add("Authorization", $"Bearer {opts.ApiKey}");
+    var response = await http.GetAsync("https://api.openai.com/v1/models", ct);
+    if (!response.IsSuccessStatusCode)
+        return Results.StatusCode((int)response.StatusCode);
+
+    var json = await response.Content.ReadAsStringAsync(ct);
+    return Results.Text(json, "application/json");
+});
+
 // GET /api/settings
 app.MapGet("/api/settings", (SettingsManager settings, IConfiguration config) =>
     Results.Ok(settings.GetMaskedSettings(config)));

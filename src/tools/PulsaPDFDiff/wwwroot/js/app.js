@@ -18,6 +18,7 @@
     const settingsBtn = document.getElementById('settingsBtn');
     const settingsModal = document.getElementById('settingsModal');
     const apiKeyInput = document.getElementById('apiKeyInput');
+    const modelSelect = document.getElementById('modelSelect');
     const modelInput = document.getElementById('modelInput');
     const saveSettingsBtn = document.getElementById('saveSettingsBtn');
     const closeSettingsBtn = document.getElementById('closeSettingsBtn');
@@ -117,12 +118,48 @@
         }
     });
 
+    async function loadModels() {
+        modelSelect.innerHTML = '<option value="">로딩 중...</option>';
+        try {
+            const res = await fetch('/api/models');
+            if (!res.ok) {
+                modelSelect.innerHTML = '<option value="">API key 필요</option>';
+                return;
+            }
+            const data = await res.json();
+            const models = (data.data || [])
+                .map(m => m.id)
+                .filter(id => id.startsWith('gpt-') || id.startsWith('o'))
+                .sort();
+            modelSelect.innerHTML = '<option value="">(직접 입력)</option>';
+            models.forEach(id => {
+                const opt = document.createElement('option');
+                opt.value = id;
+                opt.textContent = id;
+                modelSelect.appendChild(opt);
+            });
+        } catch {
+            modelSelect.innerHTML = '<option value="">(목록 로드 실패)</option>';
+        }
+    }
+
+    modelSelect.addEventListener('change', () => {
+        if (modelSelect.value) modelInput.value = modelSelect.value;
+    });
+
     settingsBtn.addEventListener('click', async () => {
         const res = await fetch('/api/settings');
         const settings = await res.json();
         apiKeyInput.value = settings.apiKey || '';
         modelInput.value = settings.model || 'gpt-4o';
         settingsModal.hidden = false;
+        loadModels().then(() => {
+            // Pre-select current model if it's in the list
+            const current = settings.model || 'gpt-4o';
+            if ([...modelSelect.options].some(o => o.value === current)) {
+                modelSelect.value = current;
+            }
+        });
     });
 
     closeSettingsBtn.addEventListener('click', () => { settingsModal.hidden = true; });
