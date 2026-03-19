@@ -5,10 +5,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\Pulsa\Pulsa.csproj" />
-    <PackageReference Include="LMSupply.Generator" />
-    <PackageReference Include="Microsoft.Extensions.AI" />
-    <PackageReference Include="Microsoft.Extensions.AI.OpenAI" />
+    <ProjectReference Include="..\PulsaLLM.SDK\PulsaLLM.SDK.csproj" />
+    <ProjectReference Include="..\..\..\Pulsa\Pulsa.csproj" />
     <PackageReference Include="IndexThinking" />
     <PackageReference Include="TokenMeter" />
     <PackageReference Include="Microsoft.Extensions.Hosting" />

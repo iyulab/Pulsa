@@ -7,3 +7,4 @@ logs/
 claudedocs/
 test-llm/
 CLAUDE.md
+.playwright-mcp/

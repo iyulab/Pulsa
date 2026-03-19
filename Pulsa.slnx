@@ -1,7 +1,11 @@
 <Solution>
   <Project Path="src/Pulsa/Pulsa.csproj" />
-  <Project Path="src/tools/PulsaAudioConvert/PulsaAudioConvert.csproj" />
-  <Project Path="src/tools/PulsaSTT/PulsaSTT.csproj" />
-  <Project Path="src/tools/PulsaLLM/PulsaLLM.csproj" />
-  <Project Path="src/tools/PulsaPDFDiff/PulsaPDFDiff.csproj" />
+  <Project Path="src/tools/PulsaAudioConvert/PulsaAudioConvert.SDK/PulsaAudioConvert.SDK.csproj" />
+  <Project Path="src/tools/PulsaAudioConvert/PulsaAudioConvert.Worker/PulsaAudioConvert.Worker.csproj" />
+  <Project Path="src/tools/PulsaSTT/PulsaSTT.SDK/PulsaSTT.SDK.csproj" />
+  <Project Path="src/tools/PulsaSTT/PulsaSTT.Worker/PulsaSTT.Worker.csproj" />
+  <Project Path="src/tools/PulsaLLM/PulsaLLM.SDK/PulsaLLM.SDK.csproj" />
+  <Project Path="src/tools/PulsaLLM/PulsaLLM.Worker/PulsaLLM.Worker.csproj" />
+  <Project Path="src/tools/PulsaPDFDiff/PulsaPDFDiff.SDK/PulsaPDFDiff.SDK.csproj" />
+  <Project Path="src/tools/PulsaPDFDiff/PulsaPDFDiff.WebApp/PulsaPDFDiff.WebApp.csproj" />
 </Solution>

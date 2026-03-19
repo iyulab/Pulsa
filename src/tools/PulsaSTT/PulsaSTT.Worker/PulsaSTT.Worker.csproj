@@ -5,8 +5,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\Pulsa\Pulsa.csproj" />
-    <PackageReference Include="FFMpegCore" />
+    <ProjectReference Include="..\PulsaSTT.SDK\PulsaSTT.SDK.csproj" />
+    <ProjectReference Include="..\..\..\Pulsa\Pulsa.csproj" />
+    <PackageReference Include="LMSupply.Transcriber" />
     <PackageReference Include="Microsoft.Extensions.Hosting" />
     <PackageReference Include="Serilog.Extensions.Hosting" />
     <PackageReference Include="Serilog.Settings.Configuration" />
