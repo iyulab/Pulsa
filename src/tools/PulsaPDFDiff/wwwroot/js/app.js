@@ -147,10 +147,14 @@
         if (modelSelect.value) modelInput.value = modelSelect.value;
     });
 
+    let originalMaskedKey = '';
+
     settingsBtn.addEventListener('click', async () => {
         const res = await fetch('/api/settings');
         const settings = await res.json();
-        apiKeyInput.value = settings.apiKey || '';
+        originalMaskedKey = settings.apiKey || '';
+        apiKeyInput.value = '';
+        apiKeyInput.placeholder = originalMaskedKey ? `현재: ${originalMaskedKey}` : 'API Key 입력';
         modelInput.value = settings.model || 'gpt-4o';
         settingsModal.hidden = false;
         loadModels().then(() => {
@@ -166,10 +170,13 @@
     settingsModal.addEventListener('click', (e) => { if (e.target === settingsModal) settingsModal.hidden = true; });
 
     saveSettingsBtn.addEventListener('click', async () => {
+        const payload = { model: modelInput.value };
+        // Only include apiKey if user actually typed a new one
+        if (apiKeyInput.value) payload.apiKey = apiKeyInput.value;
         await fetch('/api/settings', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ apiKey: apiKeyInput.value, model: modelInput.value })
+            body: JSON.stringify(payload)
         });
         settingsModal.hidden = true;
     });

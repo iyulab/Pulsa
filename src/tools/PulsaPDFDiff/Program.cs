@@ -125,10 +125,10 @@ app.MapGet("/api/settings", (SettingsManager settings, IConfiguration config) =>
     Results.Ok(settings.GetMaskedSettings(config)));
 
 // PUT /api/settings
-app.MapPut("/api/settings", async (OpenAIOptions newSettings, SettingsManager settings, CancellationToken ct) =>
+app.MapPut("/api/settings", async (OpenAIOptions newSettings, SettingsManager settings, IConfiguration config, CancellationToken ct) =>
 {
-    await settings.UpdateAsync(newSettings, ct);
-    return Results.Ok(new { message = "Settings saved. Restart app to apply." });
+    await settings.UpdateAsync(newSettings, config, ct);
+    return Results.Ok(new { message = "Settings saved." });
 });
 
 // Fallback to index.html for SPA

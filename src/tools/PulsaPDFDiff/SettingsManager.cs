@@ -31,7 +31,7 @@ public class SettingsManager
         return opts;
     }
 
-    public async Task UpdateAsync(OpenAIOptions newSettings, CancellationToken ct = default)
+    public async Task UpdateAsync(OpenAIOptions newSettings, IConfiguration config, CancellationToken ct = default)
     {
         JsonObject root;
         if (File.Exists(_userSettingsPath))
@@ -42,6 +42,13 @@ public class SettingsManager
         else
         {
             root = new JsonObject();
+        }
+
+        // Preserve existing API key if not provided
+        if (string.IsNullOrEmpty(newSettings.ApiKey))
+        {
+            var current = GetSettings(config);
+            newSettings.ApiKey = current.ApiKey;
         }
 
         root["OpenAI"] = JsonSerializer.SerializeToNode(newSettings, JsonOpts);
