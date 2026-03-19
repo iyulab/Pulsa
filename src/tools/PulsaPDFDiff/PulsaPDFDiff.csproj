@@ -5,6 +5,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Content Include="prompts\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\Pulsa\Pulsa.csproj" />
     <PackageReference Include="Docnet.Core" />
     <PackageReference Include="System.Drawing.Common" />
