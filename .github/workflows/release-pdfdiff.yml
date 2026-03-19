@@ -38,7 +38,10 @@ jobs:
 
       - name: Package
         shell: bash
-        run: cd publish/PulsaPDFDiff && 7z a -tzip ../PulsaPDFDiff-win-x64.zip .
+        run: |
+          cd publish/PulsaPDFDiff
+          rm -f appsettings.user.json *.staticwebassets.endpoints.json web.config LICENSE
+          7z a -tzip ../PulsaPDFDiff-win-x64.zip .
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
