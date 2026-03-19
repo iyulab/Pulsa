@@ -1,14 +1,17 @@
 # Pulsa
 
-파일 감시 기반 자동화 도구 모음. 지정된 폴더를 감시하며 새 파일이 감지되면 자동으로 처리합니다.
+문서 처리 도구 플랫폼. 파일 감시 기반 자동화 도구와 웹 기반 인터랙티브 도구를 함께 제공합니다.
 
 ## Apps
+
+자동화 도구(watch-run)와 웹 기반 인터랙티브 도구를 모두 지원합니다.
 
 | App | 설명 | 입력 | 출력 | 릴리즈 태그 |
 |-----|------|------|------|------------|
 | **PulsaAudioConvert** | 오디오 파일 포맷 변환 | `*.m4a` | `*.mp3` | `audio-convert-v*` |
 | **PulsaSTT** | 음성 파일을 텍스트로 변환 | `*.mp3` | `*.stt.txt`, `*.vtt`, `*.srt` | `stt-v*` |
 | **PulsaLLM** | LLM 기반 텍스트 처리 | `*.stt.txt` | `*.{prompt}.md` | `llm-v*` |
+| **PulsaPDFDiff** | 웹 기반 PDF 비교 도구 | PDF × 2 | 마크다운 리포트 | `pdfdiff-v*` |
 
 ### 파이프라인 예시
 
@@ -37,10 +40,12 @@
 
 ```
 src/
-├── Pulsa/                  # 공유 라이브러리 (FileWatcher, UpdateService, FileQueue 등)
-├── PulsaAudioConvert/      # 오디오 변환 앱
-├── PulsaSTT/               # 음성 인식 앱 (Whisper ONNX + GPU)
-└── PulsaLLM/               # LLM 텍스트 처리 앱
+├── Pulsa/                     # SDK — 공유 라이브러리
+└── tools/
+    ├── PulsaAudioConvert/     # 오디오 변환 (자동화)
+    ├── PulsaSTT/              # 음성 인식 (자동화)
+    ├── PulsaLLM/              # LLM 텍스트 처리 (자동화)
+    └── PulsaPDFDiff/          # PDF 비교 (웹)
 ```
 
 ## 설치
@@ -51,9 +56,10 @@ src/
 
 각 앱의 `appsettings.json`에서 설정을 변경합니다. 자세한 설정은 각 모듈의 README를 참고하세요.
 
-- [PulsaAudioConvert](src/PulsaAudioConvert/README.md)
-- [PulsaSTT](src/PulsaSTT/README.md)
-- [PulsaLLM](src/PulsaLLM/README.md)
+- [PulsaAudioConvert](src/tools/PulsaAudioConvert/README.md)
+- [PulsaSTT](src/tools/PulsaSTT/README.md)
+- [PulsaLLM](src/tools/PulsaLLM/README.md)
+- [PulsaPDFDiff](src/tools/PulsaPDFDiff/README.md)
 
 ### PulsaAudioConvert
 
@@ -138,9 +144,10 @@ OpenAI 사용 시:
 ## 빌드
 
 ```bash
-dotnet build src/PulsaAudioConvert/PulsaAudioConvert.csproj -c Release
-dotnet build src/PulsaSTT/PulsaSTT.csproj -c Release
-dotnet build src/PulsaLLM/PulsaLLM.csproj -c Release
+dotnet build src/tools/PulsaAudioConvert/PulsaAudioConvert.csproj -c Release
+dotnet build src/tools/PulsaSTT/PulsaSTT.csproj -c Release
+dotnet build src/tools/PulsaLLM/PulsaLLM.csproj -c Release
+dotnet build src/tools/PulsaPDFDiff/PulsaPDFDiff.csproj -c Release
 ```
 
 ## License
