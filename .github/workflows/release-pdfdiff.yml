@@ -1,0 +1,48 @@
+name: Release PulsaPDFDiff
+
+on:
+  push:
+    tags: ['pdfdiff-v*']
+  workflow_call:
+  workflow_dispatch:
+
+jobs:
+  release:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+          dotnet-quality: 'preview'
+
+      - name: Extract version
+        id: version
+        shell: bash
+        run: |
+          version=$(sed -n 's/.*<Version>\([^<]*\)<.*/\1/p' src/tools/PulsaPDFDiff/PulsaPDFDiff.csproj)
+          echo "version=${version}" >> $GITHUB_OUTPUT
+
+      - name: Publish
+        run: >
+          dotnet publish src/tools/PulsaPDFDiff/PulsaPDFDiff.csproj
+          -c Release
+          -r win-x64
+          --self-contained
+          -p:PublishSingleFile=true
+          -p:DebugType=none
+          -o publish/PulsaPDFDiff
+
+      - name: Package
+        shell: bash
+        run: cd publish/PulsaPDFDiff && 7z a -tzip ../PulsaPDFDiff-win-x64.zip .
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: pdfdiff-v${{ steps.version.outputs.version }}
+          name: PulsaPDFDiff v${{ steps.version.outputs.version }}
+          files: publish/PulsaPDFDiff-win-x64.zip
