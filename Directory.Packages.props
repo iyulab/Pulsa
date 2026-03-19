@@ -31,6 +31,9 @@
 
     <!-- Others -->
     <PackageVersion Include="FFMpegCore" Version="5.4.0" />
+
+    <!-- PDF -->
+    <PackageVersion Include="Docnet.Core" Version="2.6.0" />
   </ItemGroup>
 
 </Project>
