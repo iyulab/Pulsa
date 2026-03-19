@@ -25,7 +25,7 @@ builder.Services.AddSerilog(cfg => cfg
 
 var promptsDir = Path.Combine(AppContext.BaseDirectory, "prompts");
 builder.Services.AddSingleton(new PromptManager(promptsDir));
-builder.Services.AddSingleton(new SettingsManager(AppContext.BaseDirectory));
+builder.Services.AddSingleton(new SettingsManager(builder.Environment.ContentRootPath));
 builder.Services.AddSingleton<VisionComparer>();
 
 builder.Services.Configure<UpdateOptions>(builder.Configuration.GetSection("Update"));

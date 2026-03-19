@@ -7,14 +7,14 @@ namespace PulsaPDFDiff;
 [SupportedOSPlatform("windows")]
 public static class PdfImageConverter
 {
-    public static List<string> ConvertToBase64Images(Stream pdfStream, int dpi = 150)
+    public static List<string> ConvertToBase64Images(Stream pdfStream, int scalingFactor = 3)
     {
         var images = new List<string>();
         using var ms = new MemoryStream();
         pdfStream.CopyTo(ms);
         var pdfBytes = ms.ToArray();
 
-        using var docReader = DocLib.Instance.GetDocReader(pdfBytes, new PageDimensions(dpi));
+        using var docReader = DocLib.Instance.GetDocReader(pdfBytes, new PageDimensions(scalingFactor));
         for (var i = 0; i < docReader.GetPageCount(); i++)
         {
             using var pageReader = docReader.GetPageReader(i);

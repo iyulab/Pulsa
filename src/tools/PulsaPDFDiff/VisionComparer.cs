@@ -44,7 +44,12 @@ public class VisionComparer(ILogger<VisionComparer> logger)
             "Sending {RefPages} reference + {TargetPages} target pages to {Model}",
             referenceImages.Count, targetImages.Count, options.Model);
 
-        var response = await client.GetResponseAsync(messages, cancellationToken: ct);
+        var chatOptions = new ChatOptions
+        {
+            MaxOutputTokens = 16384,
+        };
+
+        var response = await client.GetResponseAsync(messages, chatOptions, ct);
         return response.Text ?? "";
     }
 }
