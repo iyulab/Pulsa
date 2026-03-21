@@ -4,6 +4,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\..\Pulsa\Pulsa.csproj" />
+    <PackageReference Include="FileFlux" />
     <PackageReference Include="FluxIndex.Extensions.FileVault" />
     <PackageReference Include="FluxIndex.Storage.SQLite" />
     <PackageReference Include="FluxIndex.Storage.PostgreSQL" />

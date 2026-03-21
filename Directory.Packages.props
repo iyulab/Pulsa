@@ -32,6 +32,9 @@
     <!-- Token counting -->
     <PackageVersion Include="TokenMeter" Version="0.3.1" />
 
+    <!-- FileFlux -->
+    <PackageVersion Include="FileFlux" Version="0.10.6" />
+
     <!-- FluxIndex -->
     <PackageVersion Include="FluxIndex.Extensions.FileVault" Version="0.10.8" />
     <PackageVersion Include="FluxIndex.Storage.SQLite" Version="0.10.8" />
