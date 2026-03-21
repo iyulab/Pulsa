@@ -22,6 +22,7 @@
 | **PulsaAudioConvert** | 자동화 | 오디오 파일 포맷 변환 | `*.m4a` | `*.mp3` | `audio-convert-v*` |
 | **PulsaSTT** | 자동화 | 음성 파일을 텍스트로 변환 | `*.mp3` | `*.stt.txt`, `*.vtt`, `*.srt` | `stt-v*` |
 | **PulsaLLM** | 자동화 | LLM 기반 텍스트 처리 | `*.stt.txt` | `*.{prompt}.md` | `llm-v*` |
+| **PulsaVault** | 자동화+MCP | 문서 자동 인덱싱 및 시맨틱 검색 | `*.md`, `*.pdf`, `*.docx` 등 | 벡터 인덱스 | `vault-v*` |
 | **PulsaPDFDiff** | 웹 | PDF 비교 (Vision LLM) | PDF × 2 | 마크다운 리포트 | `pdfdiff-v*` |
 
 ### 자동화 파이프라인
@@ -32,6 +33,14 @@
 *.m4a → [AudioConvert] → *.mp3 → [STT] → *.stt.txt → [LLM] → *.summarize.md
                                           → *.vtt
                                           → *.srt
+```
+
+### MCP 통합
+
+PulsaVault는 MCP(Model Context Protocol) 서버로 동작하여 Claude Desktop, Claude Code 등에서 로컬 문서를 검색할 수 있습니다:
+
+```
+문서 폴더 → [PulsaVault] → 벡터 인덱스 → MCP search_knowledge_base → LLM
 ```
 
 ## 설치
@@ -55,6 +64,8 @@ src/
     ├── PulsaLLM/
     │   ├── PulsaLLM.SDK/                    # LLM 처리 SDK
     │   └── PulsaLLM.Worker/                 # 자동화 앱
+    ├── PulsaVault/
+    │   └── PulsaVault.Worker/               # 문서 인덱싱 + MCP 서버
     └── PulsaPDFDiff/
         ├── PulsaPDFDiff.SDK/                # PDF 비교 SDK
         └── PulsaPDFDiff.WebApp/             # 웹 앱
@@ -70,6 +81,7 @@ src/
 - [PulsaAudioConvert](src/tools/PulsaAudioConvert/PulsaAudioConvert.Worker/README.md)
 - [PulsaSTT](src/tools/PulsaSTT/PulsaSTT.Worker/README.md)
 - [PulsaLLM](src/tools/PulsaLLM/PulsaLLM.Worker/README.md)
+- [PulsaVault](src/tools/PulsaVault/PulsaVault.Worker/README.md)
 - [PulsaPDFDiff](docs/PulsaPDFDiff.md)
 
 ## 빠른 설정 예시
@@ -128,6 +140,27 @@ src/
 }
 ```
 
+### PulsaVault
+
+```json
+{
+  "Vault": {
+    "Folders": [
+      { "Path": "D:/documents", "IncludePatterns": ["*.md", "*.pdf", "*.docx"] }
+    ]
+  },
+  "VectorStore": { "Provider": "SQLite" },
+  "Embedding": { "Provider": "LMSupply" }
+}
+```
+
+실행 모드:
+```bash
+PulsaVault                    # 백그라운드 sync만
+PulsaVault --mcp-stdio        # Claude Desktop/Code용 MCP 서버
+PulsaVault --mcp-sse          # HTTP/SSE MCP 서버
+```
+
 ### PulsaPDFDiff
 
 ```bash
@@ -169,6 +202,7 @@ dotnet build Pulsa.slnx -c Release
 dotnet build src/tools/PulsaAudioConvert/PulsaAudioConvert.Worker/PulsaAudioConvert.Worker.csproj -c Release
 dotnet build src/tools/PulsaSTT/PulsaSTT.Worker/PulsaSTT.Worker.csproj -c Release
 dotnet build src/tools/PulsaLLM/PulsaLLM.Worker/PulsaLLM.Worker.csproj -c Release
+dotnet build src/tools/PulsaVault/PulsaVault.Worker/PulsaVault.Worker.csproj -c Release
 dotnet build src/tools/PulsaPDFDiff/PulsaPDFDiff.WebApp/PulsaPDFDiff.WebApp.csproj -c Release
 ```
 
