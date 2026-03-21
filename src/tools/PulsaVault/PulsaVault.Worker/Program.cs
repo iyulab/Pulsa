@@ -1,4 +1,3 @@
-using FileFlux;
 using FluxIndex.Extensions.FileVault.Extensions;
 using FluxIndex.Providers.LMSupply.Extensions;
 using FluxIndex.Providers.OpenAI.Extensions;
@@ -154,9 +153,6 @@ static void ConfigureCommonServices(IServiceCollection services, Microsoft.Exten
 
     // ── Vault folder options ──
     services.Configure<PulsaVaultOptions>(configuration.GetSection("Vault"));
-
-    // ── FileFlux (document extraction + chunking) ──
-    services.AddFileFlux();
 
     // ── FileVault with FluxIndex (extraction + chunking + memorization) ──
     services.AddFileVaultWithFluxIndex(options =>

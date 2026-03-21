@@ -32,16 +32,13 @@
     <!-- Token counting -->
     <PackageVersion Include="TokenMeter" Version="0.3.1" />
 
-    <!-- FileFlux -->
-    <PackageVersion Include="FileFlux" Version="0.10.6" />
-
     <!-- FluxIndex -->
-    <PackageVersion Include="FluxIndex.Extensions.FileVault" Version="0.10.8" />
-    <PackageVersion Include="FluxIndex.Storage.SQLite" Version="0.10.8" />
-    <PackageVersion Include="FluxIndex.Storage.PostgreSQL" Version="0.10.8" />
-    <PackageVersion Include="FluxIndex.Providers.OpenAI" Version="0.10.8" />
-    <PackageVersion Include="FluxIndex.Providers.LMSupply" Version="0.10.8" />
-    <PackageVersion Include="FluxIndex.MCP" Version="0.10.8" />
+    <PackageVersion Include="FluxIndex.Extensions.FileVault" Version="0.12.1" />
+    <PackageVersion Include="FluxIndex.Storage.SQLite" Version="0.12.1" />
+    <PackageVersion Include="FluxIndex.Storage.PostgreSQL" Version="0.12.1" />
+    <PackageVersion Include="FluxIndex.Providers.OpenAI" Version="0.12.1" />
+    <PackageVersion Include="FluxIndex.Providers.LMSupply" Version="0.12.1" />
+    <PackageVersion Include="FluxIndex.MCP" Version="0.12.1" />
 
     <!-- MCP -->
     <PackageVersion Include="ModelContextProtocol" Version="1.1.0" />
