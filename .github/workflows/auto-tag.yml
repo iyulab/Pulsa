@@ -15,6 +15,7 @@ jobs:
       llm-changed: ${{ steps.llm.outputs.changed }}
       audio-changed: ${{ steps.audio.outputs.changed }}
       pdfdiff-changed: ${{ steps.pdfdiff.outputs.changed }}
+      vault-changed: ${{ steps.vault.outputs.changed }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -88,6 +89,23 @@ jobs:
             echo "tag=${tag}" >> $GITHUB_OUTPUT
           fi
 
+      - name: Check PulsaVault
+        id: vault
+        shell: bash
+        run: |
+          if ! git diff HEAD~1 HEAD --name-only | grep -q "src/tools/PulsaVault/PulsaVault.Worker/PulsaVault.Worker.csproj"; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          version=$(sed -n 's/.*<Version>\([^<]*\)<.*/\1/p' src/tools/PulsaVault/PulsaVault.Worker/PulsaVault.Worker.csproj)
+          tag="vault-v${version}"
+          if git ls-remote --tags origin "refs/tags/${tag}" | grep -q "${tag}"; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "tag=${tag}" >> $GITHUB_OUTPUT
+          fi
+
       - name: Create tags
         shell: bash
         run: |
@@ -106,6 +124,10 @@ jobs:
           if [ "${{ steps.pdfdiff.outputs.changed }}" == "true" ]; then
             git tag ${{ steps.pdfdiff.outputs.tag }}
             git push origin ${{ steps.pdfdiff.outputs.tag }}
+          fi
+          if [ "${{ steps.vault.outputs.changed }}" == "true" ]; then
+            git tag ${{ steps.vault.outputs.tag }}
+            git push origin ${{ steps.vault.outputs.tag }}
           fi
 
   release-stt:
@@ -133,5 +155,12 @@ jobs:
     needs: detect-changes
     if: needs.detect-changes.outputs.pdfdiff-changed == 'true'
     uses: ./.github/workflows/release-pdfdiff.yml
+    permissions:
+      contents: write
+
+  release-vault:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.vault-changed == 'true'
+    uses: ./.github/workflows/release-vault.yml
     permissions:
       contents: write

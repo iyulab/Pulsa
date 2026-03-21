@@ -10,3 +10,8 @@ CLAUDE.md
 .playwright-mcp/
 local-sample-files/
 appsettings.user.json
+.env.local
+
+# PulsaVault runtime data
+**/data/vault/
+**/data/vault-vectors.db*
