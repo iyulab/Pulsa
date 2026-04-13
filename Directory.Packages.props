@@ -50,6 +50,9 @@
     <!-- PDF -->
     <PackageVersion Include="Docnet.Core" Version="2.6.0" />
     <PackageVersion Include="System.Drawing.Common" Version="9.0.5" />
+
+    <!-- YAML -->
+    <PackageVersion Include="YamlDotNet" Version="16.3.0" />
   </ItemGroup>
 
 </Project>
