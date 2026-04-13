@@ -5,9 +5,10 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\PulsaAudioConvert.SDK\PulsaAudioConvert.SDK.csproj" />
-    <ProjectReference Include="..\..\..\Pulsa\Pulsa.csproj" />
-    <PackageReference Include="FFMpegCore" />
+    <ProjectReference Include="..\..\sdk\Pulsa.LLM.SDK\PulsaLLM.SDK.csproj" />
+    <ProjectReference Include="..\..\core\Pulsa\Pulsa.csproj" />
+    <PackageReference Include="IndexThinking" />
+    <PackageReference Include="TokenMeter" />
     <PackageReference Include="Microsoft.Extensions.Hosting" />
     <PackageReference Include="Serilog.Extensions.Hosting" />
     <PackageReference Include="Serilog.Settings.Configuration" />

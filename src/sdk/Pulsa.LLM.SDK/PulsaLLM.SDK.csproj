@@ -7,7 +7,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\Pulsa\Pulsa.csproj" />
+    <ProjectReference Include="..\..\core\Pulsa\Pulsa.csproj" />
     <PackageReference Include="LMSupply.Generator" />
     <PackageReference Include="Microsoft.Extensions.AI" />
     <PackageReference Include="Microsoft.Extensions.AI.OpenAI" />

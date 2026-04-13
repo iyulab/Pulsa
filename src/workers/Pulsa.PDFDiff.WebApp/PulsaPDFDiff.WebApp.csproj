@@ -11,8 +11,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\PulsaPDFDiff.SDK\PulsaPDFDiff.SDK.csproj" />
-    <ProjectReference Include="..\..\..\Pulsa\Pulsa.csproj" />
+    <ProjectReference Include="..\..\sdk\Pulsa.PDFDiff.SDK\PulsaPDFDiff.SDK.csproj" />
+    <ProjectReference Include="..\..\core\Pulsa\Pulsa.csproj" />
     <PackageReference Include="Serilog.Extensions.Hosting" />
     <PackageReference Include="Serilog.Settings.Configuration" />
     <PackageReference Include="Serilog.Sinks.Console" />

@@ -25,11 +25,11 @@ jobs:
         id: stt
         shell: bash
         run: |
-          if ! git diff HEAD~1 HEAD --name-only | grep -q "src/tools/PulsaSTT/PulsaSTT.Worker/PulsaSTT.Worker.csproj"; then
+          if ! git diff HEAD~1 HEAD --name-only | grep -q "src/workers/Pulsa.STT.Worker/PulsaSTT.Worker.csproj"; then
             echo "changed=false" >> $GITHUB_OUTPUT
             exit 0
           fi
-          version=$(sed -n 's/.*<Version>\([^<]*\)<.*/\1/p' src/tools/PulsaSTT/PulsaSTT.Worker/PulsaSTT.Worker.csproj)
+          version=$(sed -n 's/.*<Version>\([^<]*\)<.*/\1/p' src/workers/Pulsa.STT.Worker/PulsaSTT.Worker.csproj)
           tag="stt-v${version}"
           if git ls-remote --tags origin "refs/tags/${tag}" | grep -q "${tag}"; then
             echo "changed=false" >> $GITHUB_OUTPUT
@@ -42,11 +42,11 @@ jobs:
         id: llm
         shell: bash
         run: |
-          if ! git diff HEAD~1 HEAD --name-only | grep -q "src/tools/PulsaLLM/PulsaLLM.Worker/PulsaLLM.Worker.csproj"; then
+          if ! git diff HEAD~1 HEAD --name-only | grep -q "src/workers/Pulsa.LLM.Worker/PulsaLLM.Worker.csproj"; then
             echo "changed=false" >> $GITHUB_OUTPUT
             exit 0
           fi
-          version=$(sed -n 's/.*<Version>\([^<]*\)<.*/\1/p' src/tools/PulsaLLM/PulsaLLM.Worker/PulsaLLM.Worker.csproj)
+          version=$(sed -n 's/.*<Version>\([^<]*\)<.*/\1/p' src/workers/Pulsa.LLM.Worker/PulsaLLM.Worker.csproj)
           tag="llm-v${version}"
           if git ls-remote --tags origin "refs/tags/${tag}" | grep -q "${tag}"; then
             echo "changed=false" >> $GITHUB_OUTPUT
@@ -59,11 +59,11 @@ jobs:
         id: audio
         shell: bash
         run: |
-          if ! git diff HEAD~1 HEAD --name-only | grep -q "src/tools/PulsaAudioConvert/PulsaAudioConvert.Worker/PulsaAudioConvert.Worker.csproj"; then
+          if ! git diff HEAD~1 HEAD --name-only | grep -q "src/workers/Pulsa.AudioConvert.Worker/PulsaAudioConvert.Worker.csproj"; then
             echo "changed=false" >> $GITHUB_OUTPUT
             exit 0
           fi
-          version=$(sed -n 's/.*<Version>\([^<]*\)<.*/\1/p' src/tools/PulsaAudioConvert/PulsaAudioConvert.Worker/PulsaAudioConvert.Worker.csproj)
+          version=$(sed -n 's/.*<Version>\([^<]*\)<.*/\1/p' src/workers/Pulsa.AudioConvert.Worker/PulsaAudioConvert.Worker.csproj)
           tag="audio-convert-v${version}"
           if git ls-remote --tags origin "refs/tags/${tag}" | grep -q "${tag}"; then
             echo "changed=false" >> $GITHUB_OUTPUT
@@ -76,11 +76,11 @@ jobs:
         id: pdfdiff
         shell: bash
         run: |
-          if ! git diff HEAD~1 HEAD --name-only | grep -q "src/tools/PulsaPDFDiff/PulsaPDFDiff.WebApp/PulsaPDFDiff.WebApp.csproj"; then
+          if ! git diff HEAD~1 HEAD --name-only | grep -q "src/workers/Pulsa.PDFDiff.WebApp/PulsaPDFDiff.WebApp.csproj"; then
             echo "changed=false" >> $GITHUB_OUTPUT
             exit 0
           fi
-          version=$(sed -n 's/.*<Version>\([^<]*\)<.*/\1/p' src/tools/PulsaPDFDiff/PulsaPDFDiff.WebApp/PulsaPDFDiff.WebApp.csproj)
+          version=$(sed -n 's/.*<Version>\([^<]*\)<.*/\1/p' src/workers/Pulsa.PDFDiff.WebApp/PulsaPDFDiff.WebApp.csproj)
           tag="pdfdiff-v${version}"
           if git ls-remote --tags origin "refs/tags/${tag}" | grep -q "${tag}"; then
             echo "changed=false" >> $GITHUB_OUTPUT
@@ -93,11 +93,11 @@ jobs:
         id: vault
         shell: bash
         run: |
-          if ! git diff HEAD~1 HEAD --name-only | grep -q "src/tools/PulsaVault/PulsaVault.Worker/PulsaVault.Worker.csproj"; then
+          if ! git diff HEAD~1 HEAD --name-only | grep -q "src/workers/Pulsa.Vault.Worker/PulsaVault.Worker.csproj"; then
             echo "changed=false" >> $GITHUB_OUTPUT
             exit 0
           fi
-          version=$(sed -n 's/.*<Version>\([^<]*\)<.*/\1/p' src/tools/PulsaVault/PulsaVault.Worker/PulsaVault.Worker.csproj)
+          version=$(sed -n 's/.*<Version>\([^<]*\)<.*/\1/p' src/workers/Pulsa.Vault.Worker/PulsaVault.Worker.csproj)
           tag="vault-v${version}"
           if git ls-remote --tags origin "refs/tags/${tag}" | grep -q "${tag}"; then
             echo "changed=false" >> $GITHUB_OUTPUT

@@ -78,10 +78,10 @@ src/
 
 ## 앱별 문서
 
-- [PulsaAudioConvert](src/tools/PulsaAudioConvert/PulsaAudioConvert.Worker/README.md)
-- [PulsaSTT](src/tools/PulsaSTT/PulsaSTT.Worker/README.md)
-- [PulsaLLM](src/tools/PulsaLLM/PulsaLLM.Worker/README.md)
-- [PulsaVault](src/tools/PulsaVault/PulsaVault.Worker/README.md)
+- [PulsaAudioConvert](src/workers/Pulsa.AudioConvert.Worker/README.md)
+- [PulsaSTT](src/workers/Pulsa.STT.Worker/README.md)
+- [PulsaLLM](src/workers/Pulsa.LLM.Worker/README.md)
+- [PulsaVault](src/workers/Pulsa.Vault.Worker/README.md)
 - [PulsaPDFDiff](docs/PulsaPDFDiff.md)
 
 ## 빠른 설정 예시
@@ -199,11 +199,11 @@ PulsaPDFDiff.WebApp.exe
 dotnet build Pulsa.slnx -c Release
 
 # 개별
-dotnet build src/tools/PulsaAudioConvert/PulsaAudioConvert.Worker/PulsaAudioConvert.Worker.csproj -c Release
-dotnet build src/tools/PulsaSTT/PulsaSTT.Worker/PulsaSTT.Worker.csproj -c Release
-dotnet build src/tools/PulsaLLM/PulsaLLM.Worker/PulsaLLM.Worker.csproj -c Release
-dotnet build src/tools/PulsaVault/PulsaVault.Worker/PulsaVault.Worker.csproj -c Release
-dotnet build src/tools/PulsaPDFDiff/PulsaPDFDiff.WebApp/PulsaPDFDiff.WebApp.csproj -c Release
+dotnet build src/workers/Pulsa.AudioConvert.Worker/PulsaAudioConvert.Worker.csproj -c Release
+dotnet build src/workers/Pulsa.STT.Worker/PulsaSTT.Worker.csproj -c Release
+dotnet build src/workers/Pulsa.LLM.Worker/PulsaLLM.Worker.csproj -c Release
+dotnet build src/workers/Pulsa.Vault.Worker/PulsaVault.Worker.csproj -c Release
+dotnet build src/workers/Pulsa.PDFDiff.WebApp/PulsaPDFDiff.WebApp.csproj -c Release
 ```
 
 ## License

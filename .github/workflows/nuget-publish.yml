@@ -4,11 +4,11 @@ on:
   push:
     branches: [main]
     paths:
-      - 'src/Pulsa/Pulsa.csproj'
-      - 'src/tools/PulsaSTT/PulsaSTT.SDK/PulsaSTT.SDK.csproj'
-      - 'src/tools/PulsaLLM/PulsaLLM.SDK/PulsaLLM.SDK.csproj'
-      - 'src/tools/PulsaAudioConvert/PulsaAudioConvert.SDK/PulsaAudioConvert.SDK.csproj'
-      - 'src/tools/PulsaPDFDiff/PulsaPDFDiff.SDK/PulsaPDFDiff.SDK.csproj'
+      - 'src/core/Pulsa/Pulsa.csproj'
+      - 'src/sdk/Pulsa.STT.SDK/PulsaSTT.SDK.csproj'
+      - 'src/sdk/Pulsa.LLM.SDK/PulsaLLM.SDK.csproj'
+      - 'src/sdk/Pulsa.AudioConvert.SDK/PulsaAudioConvert.SDK.csproj'
+      - 'src/sdk/Pulsa.PDFDiff.SDK/PulsaPDFDiff.SDK.csproj'
   workflow_dispatch:
 
 jobs:
@@ -29,7 +29,7 @@ jobs:
         id: pulsa
         shell: bash
         run: |
-          csproj="src/Pulsa/Pulsa.csproj"
+          csproj="src/core/Pulsa/Pulsa.csproj"
           if [ "${{ github.event_name }}" == "workflow_dispatch" ] || git diff HEAD~1 HEAD --name-only | grep -q "$csproj"; then
             version=$(sed -n 's/.*<Version>\([^<]*\)<.*/\1/p' "$csproj")
             echo "publish=true" >> $GITHUB_OUTPUT
@@ -42,7 +42,7 @@ jobs:
         id: stt-sdk
         shell: bash
         run: |
-          csproj="src/tools/PulsaSTT/PulsaSTT.SDK/PulsaSTT.SDK.csproj"
+          csproj="src/sdk/Pulsa.STT.SDK/PulsaSTT.SDK.csproj"
           if [ "${{ github.event_name }}" == "workflow_dispatch" ] || git diff HEAD~1 HEAD --name-only | grep -q "$csproj"; then
             version=$(sed -n 's/.*<Version>\([^<]*\)<.*/\1/p' "$csproj")
             echo "publish=true" >> $GITHUB_OUTPUT
@@ -55,7 +55,7 @@ jobs:
         id: llm-sdk
         shell: bash
         run: |
-          csproj="src/tools/PulsaLLM/PulsaLLM.SDK/PulsaLLM.SDK.csproj"
+          csproj="src/sdk/Pulsa.LLM.SDK/PulsaLLM.SDK.csproj"
           if [ "${{ github.event_name }}" == "workflow_dispatch" ] || git diff HEAD~1 HEAD --name-only | grep -q "$csproj"; then
             version=$(sed -n 's/.*<Version>\([^<]*\)<.*/\1/p' "$csproj")
             echo "publish=true" >> $GITHUB_OUTPUT
@@ -68,7 +68,7 @@ jobs:
         id: audio-sdk
         shell: bash
         run: |
-          csproj="src/tools/PulsaAudioConvert/PulsaAudioConvert.SDK/PulsaAudioConvert.SDK.csproj"
+          csproj="src/sdk/Pulsa.AudioConvert.SDK/PulsaAudioConvert.SDK.csproj"
           if [ "${{ github.event_name }}" == "workflow_dispatch" ] || git diff HEAD~1 HEAD --name-only | grep -q "$csproj"; then
             version=$(sed -n 's/.*<Version>\([^<]*\)<.*/\1/p' "$csproj")
             echo "publish=true" >> $GITHUB_OUTPUT
@@ -81,7 +81,7 @@ jobs:
         id: pdfdiff-sdk
         shell: bash
         run: |
-          csproj="src/tools/PulsaPDFDiff/PulsaPDFDiff.SDK/PulsaPDFDiff.SDK.csproj"
+          csproj="src/sdk/Pulsa.PDFDiff.SDK/PulsaPDFDiff.SDK.csproj"
           if [ "${{ github.event_name }}" == "workflow_dispatch" ] || git diff HEAD~1 HEAD --name-only | grep -q "$csproj"; then
             version=$(sed -n 's/.*<Version>\([^<]*\)<.*/\1/p' "$csproj")
             echo "publish=true" >> $GITHUB_OUTPUT
@@ -103,7 +103,7 @@ jobs:
           dotnet-quality: 'preview'
 
       - name: Pack
-        run: dotnet pack src/Pulsa/Pulsa.csproj -c Release -o nupkgs
+        run: dotnet pack src/core/Pulsa/Pulsa.csproj -c Release -o nupkgs
 
       - name: Push to NuGet
         run: dotnet nuget push nupkgs/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
@@ -121,7 +121,7 @@ jobs:
           dotnet-quality: 'preview'
 
       - name: Pack
-        run: dotnet pack src/tools/PulsaSTT/PulsaSTT.SDK/PulsaSTT.SDK.csproj -c Release -o nupkgs
+        run: dotnet pack src/sdk/Pulsa.STT.SDK/PulsaSTT.SDK.csproj -c Release -o nupkgs
 
       - name: Push to NuGet
         run: dotnet nuget push nupkgs/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
@@ -139,7 +139,7 @@ jobs:
           dotnet-quality: 'preview'
 
       - name: Pack
-        run: dotnet pack src/tools/PulsaLLM/PulsaLLM.SDK/PulsaLLM.SDK.csproj -c Release -o nupkgs
+        run: dotnet pack src/sdk/Pulsa.LLM.SDK/PulsaLLM.SDK.csproj -c Release -o nupkgs
 
       - name: Push to NuGet
         run: dotnet nuget push nupkgs/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
@@ -157,7 +157,7 @@ jobs:
           dotnet-quality: 'preview'
 
       - name: Pack
-        run: dotnet pack src/tools/PulsaAudioConvert/PulsaAudioConvert.SDK/PulsaAudioConvert.SDK.csproj -c Release -o nupkgs
+        run: dotnet pack src/sdk/Pulsa.AudioConvert.SDK/PulsaAudioConvert.SDK.csproj -c Release -o nupkgs
 
       - name: Push to NuGet
         run: dotnet nuget push nupkgs/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
@@ -175,7 +175,7 @@ jobs:
           dotnet-quality: 'preview'
 
       - name: Pack
-        run: dotnet pack src/tools/PulsaPDFDiff/PulsaPDFDiff.SDK/PulsaPDFDiff.SDK.csproj -c Release -o nupkgs
+        run: dotnet pack src/sdk/Pulsa.PDFDiff.SDK/PulsaPDFDiff.SDK.csproj -c Release -o nupkgs
 
       - name: Push to NuGet
         run: dotnet nuget push nupkgs/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate

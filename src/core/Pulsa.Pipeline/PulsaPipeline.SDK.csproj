@@ -7,8 +7,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\Pulsa\Pulsa.csproj" />
-    <ProjectReference Include="..\..\PulsaLLM\PulsaLLM.SDK\PulsaLLM.SDK.csproj" />
+    <ProjectReference Include="..\Pulsa\Pulsa.csproj" />
+    <ProjectReference Include="..\..\sdk\Pulsa.LLM.SDK\PulsaLLM.SDK.csproj" />
     <PackageReference Include="YamlDotNet" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
   </ItemGroup>

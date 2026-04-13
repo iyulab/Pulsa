@@ -23,12 +23,12 @@ jobs:
         id: version
         shell: bash
         run: |
-          version=$(sed -n 's/.*<Version>\([^<]*\)<.*/\1/p' src/tools/PulsaLLM/PulsaLLM.Worker/PulsaLLM.Worker.csproj)
+          version=$(sed -n 's/.*<Version>\([^<]*\)<.*/\1/p' src/workers/Pulsa.LLM.Worker/PulsaLLM.Worker.csproj)
           echo "version=${version}" >> $GITHUB_OUTPUT
 
       - name: Publish
         run: >
-          dotnet publish src/tools/PulsaLLM/PulsaLLM.Worker/PulsaLLM.Worker.csproj
+          dotnet publish src/workers/Pulsa.LLM.Worker/PulsaLLM.Worker.csproj
           -c Release
           -r win-x64
           --self-contained

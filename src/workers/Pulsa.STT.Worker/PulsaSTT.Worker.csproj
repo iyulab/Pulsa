@@ -5,8 +5,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\PulsaSTT.SDK\PulsaSTT.SDK.csproj" />
-    <ProjectReference Include="..\..\..\Pulsa\Pulsa.csproj" />
+    <ProjectReference Include="..\..\sdk\Pulsa.STT.SDK\PulsaSTT.SDK.csproj" />
+    <ProjectReference Include="..\..\core\Pulsa\Pulsa.csproj" />
     <PackageReference Include="LMSupply.Transcriber" />
     <PackageReference Include="Microsoft.Extensions.Hosting" />
     <PackageReference Include="Serilog.Extensions.Hosting" />
