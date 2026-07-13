@@ -12,24 +12,10 @@ on:
 jobs:
   build:
     runs-on: windows-latest
-    strategy:
-      matrix:
-        project:
-          - src/workers/Pulsa.STT.Worker/PulsaSTT.Worker.csproj
-          - src/workers/Pulsa.AudioConvert.Worker/PulsaAudioConvert.Worker.csproj
-          - src/workers/Pulsa.LLM.Worker/PulsaLLM.Worker.csproj
-          - src/workers/Pulsa.PDFDiff.WebApp/PulsaPDFDiff.WebApp.csproj
-          - src/sdk/Pulsa.STT.SDK/PulsaSTT.SDK.csproj
-          - src/sdk/Pulsa.LLM.SDK/PulsaLLM.SDK.csproj
-          - src/sdk/Pulsa.AudioConvert.SDK/PulsaAudioConvert.SDK.csproj
-          - src/sdk/Pulsa.PDFDiff.SDK/PulsaPDFDiff.SDK.csproj
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '10.0.x'
-          dotnet-quality: 'preview'
+      - uses: ./.github/actions/dotnet-restore-cache
 
       - name: Build
-        run: dotnet build ${{ matrix.project }} -c Release
+        run: dotnet build Pulsa.slnx -c Release

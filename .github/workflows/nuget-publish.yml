@@ -97,10 +97,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '10.0.x'
-          dotnet-quality: 'preview'
+      - uses: ./.github/actions/dotnet-restore-cache
 
       - name: Pack
         run: dotnet pack src/core/Pulsa/Pulsa.csproj -c Release -o nupkgs
@@ -115,10 +112,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '10.0.x'
-          dotnet-quality: 'preview'
+      - uses: ./.github/actions/dotnet-restore-cache
 
       - name: Pack
         run: dotnet pack src/sdk/Pulsa.STT.SDK/PulsaSTT.SDK.csproj -c Release -o nupkgs
@@ -133,10 +127,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '10.0.x'
-          dotnet-quality: 'preview'
+      - uses: ./.github/actions/dotnet-restore-cache
 
       - name: Pack
         run: dotnet pack src/sdk/Pulsa.LLM.SDK/PulsaLLM.SDK.csproj -c Release -o nupkgs
@@ -151,10 +142,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '10.0.x'
-          dotnet-quality: 'preview'
+      - uses: ./.github/actions/dotnet-restore-cache
 
       - name: Pack
         run: dotnet pack src/sdk/Pulsa.AudioConvert.SDK/PulsaAudioConvert.SDK.csproj -c Release -o nupkgs
@@ -169,10 +157,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '10.0.x'
-          dotnet-quality: 'preview'
+      - uses: ./.github/actions/dotnet-restore-cache
 
       - name: Pack
         run: dotnet pack src/sdk/Pulsa.PDFDiff.SDK/PulsaPDFDiff.SDK.csproj -c Release -o nupkgs

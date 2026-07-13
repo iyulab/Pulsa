@@ -2,7 +2,6 @@ using System.ClientModel;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.AI;
 using Pulsa;
-using TokenMeter;
 
 namespace PulsaLLM.Workers;
 
@@ -11,10 +10,17 @@ public class LlmWorker(
     IReadOnlyList<LlmTaskOptions> tasks,
     ProviderOptions globalProvider,
     ChatClientFactory clientFactory,
-    ITokenCounter tokenCounter,
     ILogger<LlmWorker> logger) : BackgroundService
 {
     private const int MaxRetries = 3;
+
+    // Rough token estimate for proactive truncation only — it just avoids a
+    // wasted round-trip. The exact context-limit fallback in CallWithRetryAsync
+    // corrects any real overflow, so approximation is fine here: ~3 chars/token
+    // over-estimates English (truncates a bit early, safe) and under-estimates
+    // denser CJK (may skip proactive truncation, then the fallback catches it).
+    private static int EstimateTokens(string text) => (text.Length + 2) / 3;
+
     private static readonly TimeSpan[] RetryDelays =
         [TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(15)];
 
@@ -139,12 +145,12 @@ public class LlmWorker(
                     ? configuredMaxTokens
                     : Math.Max(contextWindow / 2, 2048);
                 var inputBudget = contextWindow - outputReserve;
-                var systemTokens = tokenCounter.CountTokens(systemPrompt);
+                var systemTokens = EstimateTokens(systemPrompt);
                 var userBudget = inputBudget - systemTokens - 64;
 
                 if (userBudget > 0)
                 {
-                    var userTokens = tokenCounter.CountTokens(content);
+                    var userTokens = EstimateTokens(content);
                     if (userTokens > userBudget)
                     {
                         var keepRatio = (double)userBudget / userTokens;

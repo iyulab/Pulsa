@@ -8,7 +8,6 @@
     <ProjectReference Include="..\..\sdk\Pulsa.LLM.SDK\PulsaLLM.SDK.csproj" />
     <ProjectReference Include="..\..\core\Pulsa\Pulsa.csproj" />
     <PackageReference Include="IndexThinking" />
-    <PackageReference Include="TokenMeter" />
     <PackageReference Include="Microsoft.Extensions.Hosting" />
     <PackageReference Include="Serilog.Extensions.Hosting" />
     <PackageReference Include="Serilog.Settings.Configuration" />

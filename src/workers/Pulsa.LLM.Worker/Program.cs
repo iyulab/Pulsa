@@ -5,7 +5,6 @@ using PulsaLLM;
 using PulsaLLM.Workers;
 using System.Text;
 using Serilog;
-using TokenMeter;
 
 Console.OutputEncoding = Encoding.UTF8;
 
@@ -44,7 +43,6 @@ builder.Services.AddSingleton<IReadOnlyList<IPulsaOptions>>(tasks.Cast<IPulsaOpt
 builder.Services.AddSingleton(globalProvider);
 builder.Services.AddSingleton<FileQueue>();
 builder.Services.AddSingleton<ChatClientFactory>();
-builder.Services.AddSingleton<ITokenCounter>(TokenCounter.Default());
 
 // IndexThinking agent services
 builder.Services.AddIndexThinkingAgents();

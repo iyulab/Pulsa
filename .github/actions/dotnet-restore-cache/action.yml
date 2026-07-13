@@ -1,0 +1,19 @@
+name: Setup .NET with NuGet cache
+description: Installs the .NET 10 SDK (preview) and restores the NuGet global-packages cache.
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '10.0.x'
+        dotnet-quality: 'preview'
+
+    # Cache the NuGet global-packages folder. No lock file in this repo, so the
+    # key is derived from central package versions + project files (CLAUDE.md
+    # cache policy: hash-based key with an OS-prefix restore fallback).
+    - uses: actions/cache@v4
+      with:
+        path: ~/.nuget/packages
+        key: ${{ runner.os }}-nuget-${{ hashFiles('**/Directory.Packages.props', '**/*.csproj') }}
+        restore-keys: ${{ runner.os }}-nuget-
