@@ -56,11 +56,14 @@ public sealed class FfmpegVideoComposer
     private async Task<List<string>> RenderClipsAsync(
         ComposeVideoRequest request, string workDirPath, CancellationToken cancellationToken)
     {
-        var vf = ZoompanFilterBuilder.Build(request.SceneDurationSeconds, _options);
         var frameCount = ZoompanFilterBuilder.ComputeFrameCount(request.SceneDurationSeconds, _options);
         var clipPaths = new List<string>();
         for (var i = 0; i < request.ImagePaths.Count; i++)
         {
+            // Built per scene, not hoisted out of the loop: ZoompanFilterBuilder picks its Ken-Burns
+            // motion (zoom direction + pan target) from the scene index, so every clip gets its own
+            // internally-selected, deterministic motion instead of every clip sharing one filter string.
+            var vf = ZoompanFilterBuilder.Build(i, request.SceneDurationSeconds, _options);
             var clipPath = Path.Combine(workDirPath, $"clip-{i:D4}.mp4");
             await FFMpegArguments
                 .FromFileInput(request.ImagePaths[i], verifyExists: true, opt => opt
