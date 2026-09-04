@@ -36,6 +36,10 @@ tag.
 
 ```
 src/
+├── core/
+│   └── Pulsa/                    # Pulsa — shared AI-abstraction base layer
+│                                  # (carries Microsoft.Extensions.AI.Abstractions;
+│                                  #  every Pulsa tool builds on it via ProjectReference)
 ├── sdk/
 │   └── Pulsa.VideoCompose.SDK/   # PulsaVideoCompose.SDK
 └── workers/
