@@ -37,4 +37,17 @@ public class ZoompanFilterBuilderTests
 
         filter.Should().Contain("d=63");
     }
+
+    [Fact]
+    public void ComputeFrameCount_MatchesTheDValueBuildEmits()
+    {
+        // The caller (FfmpegVideoComposer) must cap ffmpeg's output at exactly this many frames
+        // (e.g. -frames:v) — not at a wall-clock -t on the input — or zoompan's per-input-frame
+        // `d` re-triggers and multiplies the clip length instead of bounding it.
+        ZoompanFilterBuilder.ComputeFrameCount(sceneDurationSeconds: 4).Should().Be(100);
+        ZoompanFilterBuilder.ComputeFrameCount(sceneDurationSeconds: 2.5).Should().Be(63);
+
+        var options = new VideoComposeOptions(Fps: 30);
+        ZoompanFilterBuilder.ComputeFrameCount(sceneDurationSeconds: 3, options).Should().Be(90);
+    }
 }
