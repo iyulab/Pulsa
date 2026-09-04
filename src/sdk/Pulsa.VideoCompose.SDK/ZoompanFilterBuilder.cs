@@ -12,7 +12,7 @@ namespace PulsaVideoCompose;
 /// scene index selects one deterministically (plain modulo), so the same scene index always
 /// yields the same motion (reproducible, testable — never randomized) and consecutive scenes
 /// cycle through visually distinct Ken-Burns moves instead of every clip repeating the same
-/// centered zoom-in. Rotation is deliberately not part of the table (not part of standard Ken
+/// top-left-anchored zoom-in. Rotation is deliberately not part of the table (not part of standard Ken
 /// Burns, added complexity for no clear benefit) and scene-to-scene transitions stay hard cuts
 /// (no crossfade — see FfmpegVideoComposer's class doc on why this codebase avoids
 /// filter_complex).
@@ -23,12 +23,17 @@ public static class ZoompanFilterBuilder
 
     /// <summary>
     /// One entry in the motion preset table. <paramref name="PanTargetX"/>/<paramref name="PanTargetY"/>
-    /// are each a fraction in [0,1] describing where the zoompan crop window should drift toward as
-    /// zoom departs from 1.0: 0 = that axis's start edge, 1 = its end edge, 0.5 = that axis's center
-    /// (no drift on that axis). <see langword="null"/> for both means "omit x=/y= from the emitted
-    /// filter entirely" — zoompan's own default (x=0, y=0, i.e. a fixed top-left anchor) then applies,
-    /// which is exactly what the pre-variety <c>Build</c> emitted. Preset 0 uses this so its output is
-    /// byte-identical to the old signature's — see the ZoompanFilterBuilderTests test suite.
+    /// are each a fraction in [0,1] describing which point of the source frame the crop window is
+    /// ANCHORED to at maximum zoom: 0 = that axis's start edge, 1 = its end edge, 0.5 = that axis's
+    /// center (no pan on that axis). This is an anchor, not a "drift toward" direction — for a
+    /// zoom-IN preset the window visibly moves toward that anchor as zoom increases from 1.0; for a
+    /// zoom-OUT preset zoom instead starts pinned at that anchor (seeded at MaxZoom, see the `z`
+    /// expression below) and the window drifts back toward frame CENTER as zoom decreases toward
+    /// 1.0 — the opposite visible direction, same anchor point. <see langword="null"/> for both means
+    /// "omit x=/y= from the emitted filter entirely" — zoompan's own default (x=0, y=0, i.e. a fixed
+    /// top-left anchor) then applies, which is exactly what the pre-variety <c>Build</c> emitted.
+    /// Preset 0 uses this so its output is byte-identical to the old signature's — see the
+    /// ZoompanFilterBuilderTests test suite.
     /// </summary>
     private sealed record MotionPreset(ZoomDirection Zoom, double? PanTargetX, double? PanTargetY);
 
@@ -41,12 +46,12 @@ public static class ZoompanFilterBuilder
     /// </summary>
     private static readonly MotionPreset[] Presets =
     [
-        new(ZoomDirection.In,  null, null), // 0: legacy default — zoom in, no explicit pan (byte-compat)
-        new(ZoomDirection.In,  1.0,  1.0),  // 1: zoom in,  pan toward bottom-right
-        new(ZoomDirection.Out, 0.0,  0.0),  // 2: zoom out, pan toward top-left
-        new(ZoomDirection.In,  1.0,  0.0),  // 3: zoom in,  pan toward top-right
-        new(ZoomDirection.Out, 0.0,  1.0),  // 4: zoom out, pan toward bottom-left
-        new(ZoomDirection.Out, 0.5,  0.5),  // 5: zoom out, centered (no pan)
+        new(ZoomDirection.In,  null, null), // 0: legacy default — zoom in, top-left anchor (byte-compat)
+        new(ZoomDirection.In,  1.0,  1.0),  // 1: zoom in,  anchored bottom-right
+        new(ZoomDirection.Out, 0.0,  0.0),  // 2: zoom out, anchored top-left (peak zoom), drifts to center
+        new(ZoomDirection.In,  1.0,  0.0),  // 3: zoom in,  anchored top-right
+        new(ZoomDirection.Out, 0.0,  1.0),  // 4: zoom out, anchored bottom-left (peak zoom), drifts to center
+        new(ZoomDirection.Out, 0.5,  0.5),  // 5: zoom out, centered anchor (no pan)
     ];
 
     public static string Build(int sceneIndex, double sceneDurationSeconds, VideoComposeOptions? options = null)

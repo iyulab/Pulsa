@@ -39,7 +39,7 @@ public class ZoompanFilterBuilderTests
     }
 
     [Fact]
-    public void Build_SceneIndexZero_IsByteIdenticalToLegacyCenteredZoomInBehavior()
+    public void Build_SceneIndexZero_IsByteIdenticalToLegacyTopLeftAnchoredZoomInBehavior()
     {
         // Preset 0 must reproduce exactly what the pre-variety Build(sceneDurationSeconds, options)
         // used to emit — same z expression, and no explicit x=/y= at all (zoompan's own default of
