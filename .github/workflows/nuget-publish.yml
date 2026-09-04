@@ -62,9 +62,15 @@ jobs:
 
   # PulsaVideoCompose.SDK's packed nuspec carries a hard `<dependency id="Pulsa">` (via its
   # ProjectReference to src/core/Pulsa) — it must not be pushed to nuget.org ahead of a Pulsa
-  # version bump that hasn't been published yet, or the published package becomes unresolvable.
-  # needs publish-pulsa with success-or-skipped so this still runs standalone when only the SDK
-  # itself changed and Pulsa's already-published version already satisfies the dependency.
+  # version bump that has actually been published, or the published SDK becomes unresolvable.
+  # CORRECTNESS PRECONDITION (2026-09-04): nuget.org's existing `Pulsa 0.1.0` (published
+  # 2026-03-19) is NOT this project — it's the old FileWatcher-era Pulsa, a different library
+  # that happens to share this id+version by coincidence. `publish-pulsa`'s `--skip-duplicate`
+  # will silently no-op against it forever. Before the FIRST real publish of either package,
+  # bump src/core/Pulsa/Pulsa.csproj's <Version> (e.g. 0.1.0 -> 0.1.1) so this job actually
+  # pushes the real (AI-abstraction-conduit) Pulsa, not a duplicate-check against a stranger.
+  # needs publish-pulsa with success-or-skipped so this still runs standalone once Pulsa's own
+  # version has already been correctly published and only the SDK itself changes afterward.
   publish-video-compose-sdk:
     needs: [detect-changes, publish-pulsa]
     if: always() && needs.detect-changes.outputs.video-compose-sdk == 'true' && (needs.publish-pulsa.result == 'success' || needs.publish-pulsa.result == 'skipped')
