@@ -10,11 +10,16 @@ namespace PulsaVideoCompose;
 public sealed class FfmpegVideoComposer
 {
     private readonly VideoComposeOptions _options;
+    private readonly FFOptions _ffOptions;
 
     public FfmpegVideoComposer(string ffmpegBinaryFolder, VideoComposeOptions? options = null)
     {
         _options = options ?? new VideoComposeOptions();
-        GlobalFFOptions.Configure(new FFOptions { BinaryFolder = ffmpegBinaryFolder });
+        // Per-instance, not GlobalFFOptions.Configure: that mutates process-global state shared by
+        // every FFMpegCore consumer in the process, so constructing a second FfmpegVideoComposer
+        // with a different binary folder would silently repoint the first one. Each stage method
+        // threads _ffOptions through ProcessAsynchronously's ffMpegOptions parameter instead.
+        _ffOptions = new FFOptions { BinaryFolder = ffmpegBinaryFolder };
     }
 
     public async Task<ComposeVideoResult> ComposeAsync(
@@ -72,13 +77,13 @@ public sealed class FfmpegVideoComposer
                     // before this fix, confirmed 2.0s exactly after.
                     .WithCustomArgument($"-frames:v {frameCount}"))
                 .CancellableThrough(cancellationToken)
-                .ProcessAsynchronously();
+                .ProcessAsynchronously(ffMpegOptions: _ffOptions);
             clipPaths.Add(clipPath);
         }
         return clipPaths;
     }
 
-    private static async Task<string> ConcatClipsAsync(
+    private async Task<string> ConcatClipsAsync(
         List<string> clipPaths, string workDirPath, CancellationToken cancellationToken)
     {
         var listPath = Path.Combine(workDirPath, "concat.txt");
@@ -90,7 +95,7 @@ public sealed class FfmpegVideoComposer
             .OutputToFile(concatenatedPath, overwrite: true, opt => opt
                 .WithCustomArgument("-c copy"))
             .CancellableThrough(cancellationToken)
-            .ProcessAsynchronously();
+            .ProcessAsynchronously(ffMpegOptions: _ffOptions);
         return concatenatedPath;
     }
 
@@ -98,20 +103,19 @@ public sealed class FfmpegVideoComposer
         ComposeVideoRequest request, CancellationToken cancellationToken)
     {
         var srtPath = Path.ChangeExtension(request.OutputPath, ".srt");
-        // Scene duration is frame-quantized by RenderClipsAsync's -frames:v cap (ComputeFrameCount
-        // rounds to a whole frame count, then divides back out at _options.Fps) — the actual
+        // Scene duration is frame-quantized by RenderClipsAsync's -frames:v cap — the actual
         // rendered clip length is rarely exactly request.SceneDurationSeconds (e.g. 2.5s @ 25fps ->
         // 63 frames -> 2.52s actual). Subtitles must be timed against that effective, quantized
         // duration, not the raw request value, or captions drift out of sync with picture, and the
         // drift compounds scene over scene.
-        var frameCount = ZoompanFilterBuilder.ComputeFrameCount(request.SceneDurationSeconds, _options);
-        var effectiveSceneDurationSeconds = frameCount / (double)_options.Fps;
+        var effectiveSceneDurationSeconds =
+            ZoompanFilterBuilder.ComputeEffectiveSceneDuration(request.SceneDurationSeconds, _options);
         var srtContent = SrtGenerator.Generate(request.Captions, effectiveSceneDurationSeconds);
         await File.WriteAllTextAsync(srtPath, srtContent, cancellationToken);
         return srtPath;
     }
 
-    private static async Task BurnSubtitlesAsync(
+    private async Task BurnSubtitlesAsync(
         string concatenatedPath, string srtPath, string outputPath, CancellationToken cancellationToken)
     {
         await FFMpegArguments
@@ -119,7 +123,7 @@ public sealed class FfmpegVideoComposer
             .OutputToFile(outputPath, overwrite: false, opt => opt
                 .WithCustomArgument($"-vf \"subtitles='{EscapeForFilterArgument(srtPath)}'\""))
             .CancellableThrough(cancellationToken)
-            .ProcessAsynchronously();
+            .ProcessAsynchronously(ffMpegOptions: _ffOptions);
     }
 
     // ffmpeg's filter-option parser treats ':' and '\' specially inside a filter's own option

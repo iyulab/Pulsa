@@ -59,4 +59,26 @@ public class ZoompanFilterBuilderTests
 
         filter.Should().Contain($"d={frameCount}");
     }
+
+    [Fact]
+    public void ComputeEffectiveSceneDuration_DurationDividesFrameCountEvenly_ReturnsTheInputUnchanged()
+    {
+        // 4s @ 25fps (default) -> 100 frames, which divides back out to exactly 4s.
+        var effective = ZoompanFilterBuilder.ComputeEffectiveSceneDuration(sceneDurationSeconds: 4);
+
+        effective.Should().Be(4.0);
+    }
+
+    [Fact]
+    public void ComputeEffectiveSceneDuration_FractionalDuration_ReturnsTheFrameQuantizedValue()
+    {
+        // 2.5s @ 25fps rounds up to 63 frames (ComputeFrameCount_MatchesTheDValueBuildEmits /
+        // Build_FractionalDuration_RoundsFrameCount already assert d=63) -> 63/25 = 2.52s actual,
+        // not the raw 2.5s requested. This is the case WriteSubtitlesAsync must time captions
+        // against, or subtitle timing drifts out of sync with the rendered picture.
+        var effective = ZoompanFilterBuilder.ComputeEffectiveSceneDuration(sceneDurationSeconds: 2.5);
+
+        effective.Should().Be(63.0 / 25.0);
+        effective.Should().NotBe(2.5);
+    }
 }

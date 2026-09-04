@@ -36,4 +36,17 @@ public static class ZoompanFilterBuilder
         var opts = options ?? new VideoComposeOptions();
         return Math.Max(1, (int)Math.Round(sceneDurationSeconds * opts.Fps, MidpointRounding.AwayFromZero));
     }
+
+    /// <summary>
+    /// The scene duration actually realized on screen once <see cref="ComputeFrameCount"/>'s
+    /// frame-quantization is applied — rarely identical to <paramref name="sceneDurationSeconds"/>
+    /// (e.g. 2.5s @ 25fps rounds to 63 frames, i.e. 2.52s). Captions must be timed against this
+    /// effective duration, not the raw requested one, or subtitle timing drifts out of sync with
+    /// the rendered picture, and the drift compounds scene over scene.
+    /// </summary>
+    public static double ComputeEffectiveSceneDuration(double sceneDurationSeconds, VideoComposeOptions? options = null)
+    {
+        var opts = options ?? new VideoComposeOptions();
+        return ComputeFrameCount(sceneDurationSeconds, opts) / (double)opts.Fps;
+    }
 }
