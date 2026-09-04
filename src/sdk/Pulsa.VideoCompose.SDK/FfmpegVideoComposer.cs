@@ -94,11 +94,19 @@ public sealed class FfmpegVideoComposer
         return concatenatedPath;
     }
 
-    private static async Task<string> WriteSubtitlesAsync(
+    private async Task<string> WriteSubtitlesAsync(
         ComposeVideoRequest request, CancellationToken cancellationToken)
     {
         var srtPath = Path.ChangeExtension(request.OutputPath, ".srt");
-        var srtContent = SrtGenerator.Generate(request.Captions, request.SceneDurationSeconds);
+        // Scene duration is frame-quantized by RenderClipsAsync's -frames:v cap (ComputeFrameCount
+        // rounds to a whole frame count, then divides back out at _options.Fps) — the actual
+        // rendered clip length is rarely exactly request.SceneDurationSeconds (e.g. 2.5s @ 25fps ->
+        // 63 frames -> 2.52s actual). Subtitles must be timed against that effective, quantized
+        // duration, not the raw request value, or captions drift out of sync with picture, and the
+        // drift compounds scene over scene.
+        var frameCount = ZoompanFilterBuilder.ComputeFrameCount(request.SceneDurationSeconds, _options);
+        var effectiveSceneDurationSeconds = frameCount / (double)_options.Fps;
+        var srtContent = SrtGenerator.Generate(request.Captions, effectiveSceneDurationSeconds);
         await File.WriteAllTextAsync(srtPath, srtContent, cancellationToken);
         return srtPath;
     }

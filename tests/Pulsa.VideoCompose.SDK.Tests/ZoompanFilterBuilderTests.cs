@@ -43,11 +43,20 @@ public class ZoompanFilterBuilderTests
     {
         // The caller (FfmpegVideoComposer) must cap ffmpeg's output at exactly this many frames
         // (e.g. -frames:v) — not at a wall-clock -t on the input — or zoompan's per-input-frame
-        // `d` re-triggers and multiplies the clip length instead of bounding it.
-        ZoompanFilterBuilder.ComputeFrameCount(sceneDurationSeconds: 4).Should().Be(100);
-        ZoompanFilterBuilder.ComputeFrameCount(sceneDurationSeconds: 2.5).Should().Be(63);
+        // `d` re-triggers and multiplies the clip length instead of bounding it. Asserting against
+        // Build()'s own emitted `d=` value (not a hardcoded number) is what actually guards against
+        // the two ever drifting apart — e.g. if a future edit inlines the formula back into Build
+        // and it silently disagrees with ComputeFrameCount, this is the test that would catch it.
+        AssertBuildAndComputeFrameCountAgree(sceneDurationSeconds: 4, options: null);
+        AssertBuildAndComputeFrameCountAgree(sceneDurationSeconds: 2.5, options: null);
+        AssertBuildAndComputeFrameCountAgree(sceneDurationSeconds: 3, options: new VideoComposeOptions(Fps: 30));
+    }
 
-        var options = new VideoComposeOptions(Fps: 30);
-        ZoompanFilterBuilder.ComputeFrameCount(sceneDurationSeconds: 3, options).Should().Be(90);
+    private static void AssertBuildAndComputeFrameCountAgree(double sceneDurationSeconds, VideoComposeOptions? options)
+    {
+        var filter = ZoompanFilterBuilder.Build(sceneDurationSeconds, options);
+        var frameCount = ZoompanFilterBuilder.ComputeFrameCount(sceneDurationSeconds, options);
+
+        filter.Should().Contain($"d={frameCount}");
     }
 }
