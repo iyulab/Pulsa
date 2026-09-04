@@ -7,10 +7,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\core\Pulsa\Pulsa.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
     <PackageReference Include="FFMpegCore" />
     <PackageReference Include="Microsoft.Extensions.AI.Abstractions" />
   </ItemGroup>

@@ -1,6 +1,4 @@
 <Solution>
-  <Project Path="src/core/Pulsa/Pulsa.csproj" />
-  <Project Path="src/core/Pulsa.Pipeline/PulsaPipeline.SDK.csproj" />
   <Project Path="src/sdk/Pulsa.VideoCompose.SDK/PulsaVideoCompose.SDK.csproj" />
   <Project Path="src/workers/Pulsa.VideoCompose.Cli/PulsaVideoCompose.Cli.csproj" />
   <Project Path="tests/Pulsa.VideoCompose.SDK.Tests/Pulsa.VideoCompose.SDK.Tests.csproj" />

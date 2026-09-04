@@ -3,18 +3,14 @@
 [![Build](https://github.com/iyulab/Pulsa/actions/workflows/build.yml/badge.svg)](https://github.com/iyulab/Pulsa/actions/workflows/build.yml)
 [![NuGet](https://github.com/iyulab/Pulsa/actions/workflows/nuget-publish.yml/badge.svg)](https://github.com/iyulab/Pulsa/actions/workflows/nuget-publish.yml)
 
-### NuGet Packages
-
-| Package | Version |
-|---------|---------|
-| Pulsa | [![NuGet](https://img.shields.io/nuget/v/Pulsa.svg)](https://www.nuget.org/packages/Pulsa) |
-
 ## VideoCompose
 
 Compose a folder's images into a captioned, Ken-Burns-animated 16:9 video (no narration) — built as
 the core library for [Filer](https://github.com/iyulab/filer)'s `video-composer` plugin, but
 independent of it: `PulsaVideoCompose.SDK` has no knowledge of Filer and can be used standalone via
 `PulsaVideoCompose.Cli`.
+
+### NuGet Packages
 
 | Package | Version |
 |---------|---------|
@@ -40,9 +36,10 @@ tag.
 
 ```
 src/
-└── core/
-    ├── Pulsa/                # 중앙 SDK (FileWatcher, UpdateService 등)
-    └── Pulsa.Pipeline/       # 공용 파이프라인 SDK
+├── sdk/
+│   └── Pulsa.VideoCompose.SDK/   # PulsaVideoCompose.SDK
+└── workers/
+    └── Pulsa.VideoCompose.Cli/   # PulsaVideoCompose.Cli
 ```
 
 ## 빌드
