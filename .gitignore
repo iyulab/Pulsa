@@ -15,3 +15,7 @@ appsettings.user.json
 # PulsaVault runtime data
 **/data/vault/
 **/data/vault-vectors.db*
+
+# Local smoke-test fixtures/output (binary images, rendered video) — not committed
+test-fixtures/
+out/
