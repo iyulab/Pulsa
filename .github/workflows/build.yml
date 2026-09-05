@@ -20,5 +20,12 @@ jobs:
       - name: Build
         run: dotnet build Pulsa.slnx -c Release
 
+      # Pulsa.Redact.SDK.Tests' live tests need a real ffmpeg on PATH; don't rely on assumptions
+      # about what windows-latest ships. Chocolatey is preinstalled on GitHub's windows-latest
+      # runners, so this has no extra action dependency to keep current/trusted (vs. a third-party
+      # setup-ffmpeg action).
+      - name: Install ffmpeg
+        run: choco install ffmpeg -y
+
       - name: Test
         run: dotnet test Pulsa.slnx -c Release --no-build

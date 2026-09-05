@@ -28,14 +28,20 @@ public sealed class MediaRedactor
             return new RedactResult(false, null, $"{request.InputPath} does not exist");
 
         var isImage = ImageExtensions.Contains(Path.GetExtension(request.InputPath));
-        // Images never carry a time range — StartTime/EndTime are accepted but ignored, not
-        // rejected, matching the plan's "ignored entirely for a still-image input" contract.
-        var filter = PixelateFilterBuilder.Build(
-            request.X, request.Y, request.Width, request.Height,
-            isImage ? null : request.StartTime, isImage ? null : request.EndTime);
 
         try
         {
+            // Images never carry a time range — StartTime/EndTime are accepted but ignored, not
+            // rejected, matching the plan's "ignored entirely for a still-image input" contract.
+            // Build is called INSIDE the try (not before it) so its own ArgumentException (e.g. a
+            // video request supplying only one of StartTime/EndTime) is caught below and converted
+            // into a failure RedactResult, like every other failure path on this method — instead
+            // of escaping as a faulted Task. Matches FfmpegVideoComposer.ComposeAsync's contract
+            // for this exact class of exception.
+            var filter = PixelateFilterBuilder.Build(
+                request.X, request.Y, request.Width, request.Height,
+                isImage ? null : request.StartTime, isImage ? null : request.EndTime);
+
             var args = FFMpegArguments
                 .FromFileInput(request.InputPath, verifyExists: true, opt =>
                 {
@@ -44,7 +50,14 @@ public sealed class MediaRedactor
                 .OutputToFile(request.OutputPath, overwrite: false, opt =>
                 {
                     opt.WithCustomArgument($"-filter_complex \"{filter}\"");
-                    if (isImage) opt.WithCustomArgument("-frames:v 1");
+                    if (isImage)
+                    {
+                        opt.WithCustomArgument("-frames:v 1");
+                        // -update 1 is the documented-stable form for single-image output; without
+                        // it, current ffmpeg builds emit a deprecation warning ("Use -update option
+                        // ... to write a single image") though it still works.
+                        opt.WithCustomArgument("-update 1");
+                    }
                 });
 
             await args.CancellableThrough(cancellationToken).ProcessAsynchronously(ffMpegOptions: _ffOptions);

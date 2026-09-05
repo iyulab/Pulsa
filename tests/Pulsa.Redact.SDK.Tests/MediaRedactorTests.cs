@@ -72,6 +72,28 @@ public class MediaRedactorTests : IDisposable
 
     public void Dispose() => Directory.Delete(_tempDir, recursive: true);
 
+    [Fact]
+    public async Task RedactAsync_VideoWithOnlyStartTimeGiven_ReturnsFailureInsteadOfThrowing()
+    {
+        // Regression test for the ArgumentException-escapes-the-result-contract bug: a video
+        // request supplying only StartTime (not EndTime) trips PixelateFilterBuilder.Build's own
+        // "must both be supplied together, or neither" guard. That call used to happen OUTSIDE
+        // MediaRedactor's try block, so the ArgumentException propagated out as a faulted Task
+        // instead of the RedactResult(false, ...) every other failure path returns. This never
+        // reaches ffmpeg (the garbage binary-folder fixture from the constructor would otherwise
+        // make that hang/fail differently) -- the exception is thrown during Build, before
+        // FFMpegArguments is even constructed.
+        var inputPath = Path.Combine(_tempDir, "in.mp4");
+        await File.WriteAllBytesAsync(inputPath, [0]);
+
+        var act = () => _redactor.RedactAsync(new RedactRequest(
+            InputPath: inputPath, OutputPath: Path.Combine(_tempDir, "out.mp4"),
+            X: 0, Y: 0, Width: 10, Height: 10, StartTime: 2.0));
+
+        var result = await act.Should().NotThrowAsync();
+        result.Which.Success.Should().BeFalse();
+    }
+
     private static string ResolveFfmpegBinaryFolder() =>
         Environment.GetEnvironmentVariable("PULSA_FFMPEG_PATH") ?? string.Empty;
 
@@ -89,6 +111,44 @@ public class MediaRedactorTests : IDisposable
         return path;
     }
 
+    private static async Task<string> CreateTestsrcPngAsync(string path, int width, int height)
+    {
+        // Unlike CreateTestPngAsync's flat color, `rgbtestsrc` produces a continuous R/G/B
+        // gradient across the ENTIRE frame (no flat solid-colored blocks anywhere, unlike
+        // ffmpeg's `testsrc`/`smptebars` patterns, which have large flat regions a small crop can
+        // easily land entirely inside of). That continuous variation is what's actually needed
+        // here: pixelating a region that happens to already be a flat color is a true no-op even
+        // WITH the fix (downsample-then-upsample of a constant region reproduces the same
+        // constant), so a region with real internal gradient is required to prove "the region's
+        // pixels changed" and to give yuv420 chroma subsampling something to visibly perturb.
+        await FFMpegArguments
+            .FromFileInput($"rgbtestsrc=size={width}x{height}:rate=1", verifyExists: false, opt => opt.WithCustomArgument("-f lavfi"))
+            .OutputToFile(path, overwrite: true, opt => opt.WithCustomArgument("-frames:v 1"))
+            .ProcessAsynchronously(ffMpegOptions: new FFOptions { BinaryFolder = ResolveFfmpegBinaryFolder() });
+        return path;
+    }
+
+    /// <summary>
+    /// Crops the given rectangle out of <paramref name="imagePath"/> and decodes it to raw rgb24
+    /// bytes (no container/compression involved) so two crops can be compared byte-for-byte in C#.
+    /// Both source and output in these tests are lossless PNGs, so this is an exact, deterministic
+    /// pixel comparison -- not a perceptual metric -- proving real pixel-level differences (or the
+    /// lack thereof) rather than inferring them from file size or dimensions.
+    /// </summary>
+    private async Task<byte[]> CropToRawRgbAsync(string imagePath, int x, int y, int width, int height)
+    {
+        var rawPath = Path.Combine(_tempDir, $"crop-{Path.GetFileNameWithoutExtension(imagePath)}-{x}-{y}-{width}x{height}-{Guid.NewGuid():N}.raw");
+        await FFMpegArguments
+            .FromFileInput(imagePath, verifyExists: true)
+            .OutputToFile(rawPath, overwrite: true, opt => opt
+                .WithCustomArgument($"-vf \"crop={width}:{height}:{x}:{y}\"")
+                .WithCustomArgument("-pix_fmt rgb24")
+                .WithCustomArgument("-frames:v 1")
+                .WithCustomArgument("-f rawvideo"))
+            .ProcessAsynchronously(ffMpegOptions: new FFOptions { BinaryFolder = ResolveFfmpegBinaryFolder() });
+        return await File.ReadAllBytesAsync(rawPath);
+    }
+
     private static async Task<string> CreateTestVideoAsync(string path, int width, int height, double durationSeconds)
     {
         await FFMpegArguments
@@ -101,24 +161,71 @@ public class MediaRedactorTests : IDisposable
     [Fact]
     public async Task RedactAsync_LiveImage_PixelatesRegionAndLeavesRestUnchanged()
     {
+        // Uses ffmpeg's `testsrc` source (structured color-bar/gradient pattern), not a flat
+        // color: a flat region can prove neither half of this test's name. Pixelating a flat
+        // color as a silent no-op looks identical to pixelating it correctly (can't prove
+        // "region changed"), and the whole-frame yuv420-subsampling degradation Fix 4 addresses
+        // doesn't visibly perturb a flat color either, since a constant region's chroma resamples
+        // to the same value regardless (can't prove "rest unchanged"). Both halves are verified
+        // via byte-exact raw rgb24 crop comparison (see CropToRawRgbAsync) — both source and
+        // output are lossless PNGs, so an exact byte comparison is the correct bar, not a
+        // perceptual/lossy metric.
         var redactor = new MediaRedactor(ResolveFfmpegBinaryFolder());
-        var inputPath = await CreateTestPngAsync(Path.Combine(_tempDir, "solid.png"), 200, 100);
-        var outputPath = Path.Combine(_tempDir, "solid-redacted.png");
+        var inputPath = await CreateTestsrcPngAsync(Path.Combine(_tempDir, "testsrc-200x100.png"), 200, 100);
+        var outputPath = Path.Combine(_tempDir, "testsrc-200x100-redacted.png");
+        const int x = 10, y = 10, width = 50, height = 30;
 
         var result = await redactor.RedactAsync(new RedactRequest(
-            InputPath: inputPath, OutputPath: outputPath, X: 10, Y: 10, Width: 50, Height: 30));
+            InputPath: inputPath, OutputPath: outputPath, X: x, Y: y, Width: width, Height: height));
 
-        result.Success.Should().BeTrue();
+        result.Success.Should().BeTrue(because: result.Error);
         File.Exists(outputPath).Should().BeTrue();
-        // The source is a single flat color, so the redacted region pixelating "blue -> blocky blue"
-        // produces no visible pixel difference — this test instead asserts the more basic, still-
-        // real correctness bar: the output file is a valid, non-empty, same-dimensions image ffmpeg
-        // could itself re-read. Task 6 uses a two-color source specifically to assert pixel-level
-        // region-vs-outside behavior, which a flat color cannot distinguish.
         new FileInfo(outputPath).Length.Should().BeGreaterThan(0);
         var probe = await FFProbe.AnalyseAsync(outputPath, ffOptions: new FFOptions { BinaryFolder = ResolveFfmpegBinaryFolder() });
         probe.PrimaryVideoStream!.Width.Should().Be(200);
         probe.PrimaryVideoStream.Height.Should().Be(100);
+
+        // The redacted region must actually be pixelated (not a silent no-op).
+        var regionBefore = await CropToRawRgbAsync(inputPath, x, y, width, height);
+        var regionAfter = await CropToRawRgbAsync(outputPath, x, y, width, height);
+        regionAfter.Should().NotEqual(regionBefore, "the redacted region must actually be pixelated");
+
+        // A patch OUTSIDE the redacted region must be byte-identical to the source — proving
+        // overlay's format=auto avoids forcing the whole RGB frame through yuv420 chroma
+        // subsampling (Fix 4's regression: without format=auto, overlay's default internal
+        // format is yuv420, which degrades pixels far outside the redacted rectangle too via the
+        // RGB<->YUV round trip it forces on the entire frame).
+        const int outsideX = 120, outsideY = 60, outsideWidth = 40, outsideHeight = 20;
+        var outsideBefore = await CropToRawRgbAsync(inputPath, outsideX, outsideY, outsideWidth, outsideHeight);
+        var outsideAfter = await CropToRawRgbAsync(outputPath, outsideX, outsideY, outsideWidth, outsideHeight);
+        outsideAfter.Should().Equal(outsideBefore, "pixels outside the redacted region must be untouched");
+    }
+
+    [Fact]
+    public async Task RedactAsync_LiveImage_SubBlockSizeRegion_ActuallyPixelatesNotSilentNoOp()
+    {
+        // Regression test for the sub-blockSize no-op bug (Fix 1): with the old expression-based
+        // downscale ("scale=width/blockSize:height/blockSize", evaluated by ffmpeg as a double
+        // and truncated to int), a region smaller than blockSize on both axes (here 10x8 against
+        // the default blockSize=16) truncates that expression to 0, and ffmpeg's `scale` filter
+        // treats a 0 dimension as "keep the input dimension" — so the "pixelated" block was
+        // byte-for-byte identical to the original crop, and the region silently passed through
+        // completely unredacted while RedactResult.Success stayed true. This test proves the
+        // fixed integer floor-of-1 downscale actually changes the region's pixels. It would FAIL
+        // (regionAfter would equal regionBefore) against the pre-fix expression-based code and
+        // PASS against the fixed integer-based code — that is its entire purpose.
+        var redactor = new MediaRedactor(ResolveFfmpegBinaryFolder());
+        var inputPath = await CreateTestsrcPngAsync(Path.Combine(_tempDir, "testsrc-100x60.png"), 100, 60);
+        var outputPath = Path.Combine(_tempDir, "testsrc-100x60-redacted.png");
+        const int x = 40, y = 20, width = 10, height = 8; // both smaller than default blockSize=16
+
+        var result = await redactor.RedactAsync(new RedactRequest(
+            InputPath: inputPath, OutputPath: outputPath, X: x, Y: y, Width: width, Height: height));
+
+        result.Success.Should().BeTrue(because: result.Error);
+        var regionBefore = await CropToRawRgbAsync(inputPath, x, y, width, height);
+        var regionAfter = await CropToRawRgbAsync(outputPath, x, y, width, height);
+        regionAfter.Should().NotEqual(regionBefore, "a sub-blockSize region must still be pixelated, not silently passed through unchanged");
     }
 
     [Fact]

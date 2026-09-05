@@ -41,6 +41,7 @@ src/
 │                                  # (carries Microsoft.Extensions.AI.Abstractions;
 │                                  #  every Pulsa tool builds on it via ProjectReference)
 ├── sdk/
+│   ├── Pulsa.Redact.SDK/         # PulsaRedact.SDK
 │   └── Pulsa.VideoCompose.SDK/   # PulsaVideoCompose.SDK
 └── workers/
     └── Pulsa.VideoCompose.Cli/   # PulsaVideoCompose.Cli
