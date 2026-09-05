@@ -124,14 +124,8 @@ public sealed class FfmpegVideoComposer
         await FFMpegArguments
             .FromFileInput(concatenatedPath)
             .OutputToFile(outputPath, overwrite: false, opt => opt
-                .WithCustomArgument($"-vf \"subtitles='{EscapeForFilterArgument(srtPath)}'\""))
+                .WithCustomArgument($"-vf \"{CaptionStyleFilterBuilder.Build(srtPath)}\""))
             .CancellableThrough(cancellationToken)
             .ProcessAsynchronously(ffMpegOptions: _ffOptions);
     }
-
-    // ffmpeg's filter-option parser treats ':' and '\' specially inside a filter's own option
-    // string — a Windows path's drive-letter colon and every backslash must be escaped, or the
-    // subtitles filter misreads the path as a run of filter options instead of a file path.
-    private static string EscapeForFilterArgument(string path) =>
-        path.Replace("\\", "\\\\").Replace(":", "\\:");
 }
