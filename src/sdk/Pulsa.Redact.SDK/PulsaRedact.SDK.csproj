@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Version>0.1.0</Version>
+    <Description>Pixelate a fixed rectangular region of an image or video via ffmpeg — Filer-unaware.</Description>
+    <PackageTags>pulsa;redact;privacy;pixelate;ffmpeg</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="FFMpegCore" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\core\Pulsa\Pulsa.csproj" />
+  </ItemGroup>
+
+</Project>
