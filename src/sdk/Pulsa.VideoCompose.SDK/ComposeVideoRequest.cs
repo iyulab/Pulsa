@@ -4,6 +4,7 @@ public sealed record ComposeVideoRequest(
     IReadOnlyList<string> ImagePaths,
     IReadOnlyList<string> Captions,
     double SceneDurationSeconds,
-    string OutputPath);
+    string OutputPath,
+    string AspectRatio = "16:9");
 
 public sealed record ComposeVideoResult(bool Success, string? OutputPath, string? SrtPath, string? Error);

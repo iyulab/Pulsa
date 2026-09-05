@@ -32,12 +32,22 @@ public sealed class FfmpegVideoComposer
         if (File.Exists(request.OutputPath))
             return new ComposeVideoResult(false, null, null, $"{request.OutputPath} already exists");
 
+        VideoComposeOptions effectiveOptions;
+        try
+        {
+            effectiveOptions = AspectRatioPresets.Resolve(request.AspectRatio, _options);
+        }
+        catch (ArgumentException ex)
+        {
+            return new ComposeVideoResult(false, null, null, ex.Message);
+        }
+
         var workDir = Directory.CreateTempSubdirectory("pulsa-videocompose-");
         try
         {
-            var clipPaths = await RenderClipsAsync(request, workDir.FullName, cancellationToken);
+            var clipPaths = await RenderClipsAsync(request, effectiveOptions, workDir.FullName, cancellationToken);
             var concatenatedPath = await ConcatClipsAsync(clipPaths, workDir.FullName, cancellationToken);
-            var srtPath = await WriteSubtitlesAsync(request, cancellationToken);
+            var srtPath = await WriteSubtitlesAsync(request, effectiveOptions, cancellationToken);
             await BurnSubtitlesAsync(concatenatedPath, srtPath, request.OutputPath, cancellationToken);
 
             return new ComposeVideoResult(true, request.OutputPath, srtPath, null);
@@ -54,23 +64,23 @@ public sealed class FfmpegVideoComposer
     }
 
     private async Task<List<string>> RenderClipsAsync(
-        ComposeVideoRequest request, string workDirPath, CancellationToken cancellationToken)
+        ComposeVideoRequest request, VideoComposeOptions effectiveOptions, string workDirPath, CancellationToken cancellationToken)
     {
-        var frameCount = ZoompanFilterBuilder.ComputeFrameCount(request.SceneDurationSeconds, _options);
+        var frameCount = ZoompanFilterBuilder.ComputeFrameCount(request.SceneDurationSeconds, effectiveOptions);
         var clipPaths = new List<string>();
         for (var i = 0; i < request.ImagePaths.Count; i++)
         {
             // Built per scene, not hoisted out of the loop: ZoompanFilterBuilder picks its Ken-Burns
             // motion (zoom direction + pan target) from the scene index, so every clip gets its own
             // internally-selected, deterministic motion instead of every clip sharing one filter string.
-            var vf = ZoompanFilterBuilder.Build(i, request.SceneDurationSeconds, _options);
+            var vf = ZoompanFilterBuilder.Build(i, request.SceneDurationSeconds, effectiveOptions);
             var clipPath = Path.Combine(workDirPath, $"clip-{i:D4}.mp4");
             await FFMpegArguments
                 .FromFileInput(request.ImagePaths[i], verifyExists: true, opt => opt
                     .WithCustomArgument("-loop 1"))
                 .OutputToFile(clipPath, overwrite: true, opt => opt
                     .WithCustomArgument($"-vf \"{vf}\"")
-                    .WithFramerate(_options.Fps)
+                    .WithFramerate(effectiveOptions.Fps)
                     .WithVideoCodec("libx264")
                     // Cap the OUTPUT frame count, not input duration (-t on a looped still image
                     // forces the demuxer to emit many distinct input frames within that window,
@@ -103,7 +113,7 @@ public sealed class FfmpegVideoComposer
     }
 
     private async Task<string> WriteSubtitlesAsync(
-        ComposeVideoRequest request, CancellationToken cancellationToken)
+        ComposeVideoRequest request, VideoComposeOptions effectiveOptions, CancellationToken cancellationToken)
     {
         var srtPath = Path.ChangeExtension(request.OutputPath, ".srt");
         // Scene duration is frame-quantized by RenderClipsAsync's -frames:v cap — the actual
@@ -112,7 +122,7 @@ public sealed class FfmpegVideoComposer
         // duration, not the raw request value, or captions drift out of sync with picture, and the
         // drift compounds scene over scene.
         var effectiveSceneDurationSeconds =
-            ZoompanFilterBuilder.ComputeEffectiveSceneDuration(request.SceneDurationSeconds, _options);
+            ZoompanFilterBuilder.ComputeEffectiveSceneDuration(request.SceneDurationSeconds, effectiveOptions);
         var srtContent = SrtGenerator.Generate(request.Captions, effectiveSceneDurationSeconds);
         await File.WriteAllTextAsync(srtPath, srtContent, cancellationToken);
         return srtPath;

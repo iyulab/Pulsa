@@ -39,6 +39,17 @@ public class FfmpegVideoComposerTests : IDisposable
     }
 
     [Fact]
+    public async Task ComposeAsync_UnsupportedAspectRatio_ReturnsFailureWithoutTouchingFfmpeg()
+    {
+        var result = await _composer.ComposeAsync(new ComposeVideoRequest(
+            ImagePaths: ["a.png", "b.png"], Captions: ["one", "two"], SceneDurationSeconds: 4,
+            OutputPath: Path.Combine(_tempDir, "out.mp4"), AspectRatio: "4:3"));
+
+        result.Success.Should().BeFalse();
+        result.Error.Should().Contain("4:3");
+    }
+
+    [Fact]
     public async Task ComposeAsync_OutputPathAlreadyExists_RefusesToOverwrite()
     {
         var outputPath = Path.Combine(_tempDir, "existing.mp4");

@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <Version>0.1.1</Version>
+    <Version>0.2.0</Version>
     <Description>Compose images + captions into a captioned, Ken-Burns-animated video via ffmpeg — Filer-unaware.</Description>
     <PackageTags>pulsa;video;ffmpeg;ken-burns</PackageTags>
   </PropertyGroup>
