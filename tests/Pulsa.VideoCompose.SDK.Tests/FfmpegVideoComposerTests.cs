@@ -50,6 +50,50 @@ public class FfmpegVideoComposerTests : IDisposable
     }
 
     [Fact]
+    public async Task ComposeAsync_TitleImagePathWithoutTitleText_ReturnsFailureWithoutTouchingFfmpeg()
+    {
+        var result = await _composer.ComposeAsync(new ComposeVideoRequest(
+            ImagePaths: ["a.png", "b.png"], Captions: ["one", "two"], SceneDurationSeconds: 4,
+            OutputPath: Path.Combine(_tempDir, "out.mp4"), TitleImagePath: "logo.png"));
+
+        result.Success.Should().BeFalse();
+        result.Error.Should().Contain("titleImagePath and titleText must both be supplied together");
+    }
+
+    [Fact]
+    public async Task ComposeAsync_TitleTextWithoutTitleImagePath_ReturnsFailureWithoutTouchingFfmpeg()
+    {
+        var result = await _composer.ComposeAsync(new ComposeVideoRequest(
+            ImagePaths: ["a.png", "b.png"], Captions: ["one", "two"], SceneDurationSeconds: 4,
+            OutputPath: Path.Combine(_tempDir, "out.mp4"), TitleText: "Filer"));
+
+        result.Success.Should().BeFalse();
+        result.Error.Should().Contain("titleImagePath and titleText must both be supplied together");
+    }
+
+    [Fact]
+    public async Task ComposeAsync_OutroImagePathWithoutOutroText_ReturnsFailureWithoutTouchingFfmpeg()
+    {
+        var result = await _composer.ComposeAsync(new ComposeVideoRequest(
+            ImagePaths: ["a.png", "b.png"], Captions: ["one", "two"], SceneDurationSeconds: 4,
+            OutputPath: Path.Combine(_tempDir, "out.mp4"), OutroImagePath: "logo.png"));
+
+        result.Success.Should().BeFalse();
+        result.Error.Should().Contain("outroImagePath and outroText must both be supplied together");
+    }
+
+    [Fact]
+    public async Task ComposeAsync_OutroTextWithoutOutroImagePath_ReturnsFailureWithoutTouchingFfmpeg()
+    {
+        var result = await _composer.ComposeAsync(new ComposeVideoRequest(
+            ImagePaths: ["a.png", "b.png"], Captions: ["one", "two"], SceneDurationSeconds: 4,
+            OutputPath: Path.Combine(_tempDir, "out.mp4"), OutroText: "Try Filer"));
+
+        result.Success.Should().BeFalse();
+        result.Error.Should().Contain("outroImagePath and outroText must both be supplied together");
+    }
+
+    [Fact]
     public async Task ComposeAsync_OutputPathAlreadyExists_RefusesToOverwrite()
     {
         var outputPath = Path.Combine(_tempDir, "existing.mp4");

@@ -42,6 +42,24 @@ public class SrtGeneratorTests
     }
 
     [Fact]
+    public void Generate_WithStartOffset_ShiftsEveryTimestampForward()
+    {
+        var srt = SrtGenerator.Generate(["First", "Second"], sceneDurationSeconds: 4, startOffsetSeconds: 3);
+
+        srt.Should().Be(
+            "1\r\n00:00:03,000 --> 00:00:07,000\r\nFirst\r\n\r\n" +
+            "2\r\n00:00:07,000 --> 00:00:11,000\r\nSecond\r\n\r\n");
+    }
+
+    [Fact]
+    public void Generate_WithStartIndex_ContinuesNumberingInstead()
+    {
+        var srt = SrtGenerator.Generate(["Only"], sceneDurationSeconds: 4, startIndex: 5);
+
+        srt.Should().StartWith("5\r\n");
+    }
+
+    [Fact]
     public void Generate_HourLongDuration_FormatsHoursCorrectly()
     {
         var srt = SrtGenerator.Generate(["a", "b"], sceneDurationSeconds: 3661); // 1h 1m 1s per scene

@@ -120,6 +120,34 @@ public class ZoompanFilterBuilderTests
     }
 
     [Fact]
+    public void BuildStaticHold_DefaultOptions_HasNoZoompanZExpression()
+    {
+        var filter = ZoompanFilterBuilder.BuildStaticHold(sceneDurationSeconds: 4);
+
+        filter.Should().Contain("scale=1920:1080:force_original_aspect_ratio=increase");
+        filter.Should().Contain("crop=1920:1080");
+        filter.Should().Contain("zoompan=d=100:s=1920x1080:fps=25");
+        filter.Should().NotContain("z=");
+        filter.Should().Contain("format=yuv420p");
+    }
+
+    [Fact]
+    public void BuildStaticHold_FractionalDuration_RoundsFrameCount()
+    {
+        var filter = ZoompanFilterBuilder.BuildStaticHold(sceneDurationSeconds: 2.5);
+
+        filter.Should().Contain("d=63");
+    }
+
+    [Fact]
+    public void BuildStaticHold_NonPositiveDuration_Throws()
+    {
+        var act = () => ZoompanFilterBuilder.BuildStaticHold(sceneDurationSeconds: 0);
+
+        act.Should().Throw<ArgumentOutOfRangeException>();
+    }
+
+    [Fact]
     public void ComputeFrameCount_MatchesTheDValueBuildEmits()
     {
         // The caller (FfmpegVideoComposer) must cap ffmpeg's output at exactly this many frames

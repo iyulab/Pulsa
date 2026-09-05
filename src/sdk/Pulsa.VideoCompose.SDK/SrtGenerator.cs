@@ -9,7 +9,15 @@ namespace PulsaVideoCompose;
 /// </summary>
 public static class SrtGenerator
 {
-    public static string Generate(IReadOnlyList<string> captions, double sceneDurationSeconds)
+    /// <param name="startOffsetSeconds">Shifts every cue's start/end forward by this much — for a
+    /// scene block that doesn't begin at the start of the final concatenated video (e.g. body
+    /// captions following a title card).</param>
+    /// <param name="startIndex">The cue number the first caption is numbered — for a scene block
+    /// that isn't the first one in the final concatenated .srt (SubRip cue numbers must stay
+    /// sequential across the whole file).</param>
+    public static string Generate(
+        IReadOnlyList<string> captions, double sceneDurationSeconds,
+        double startOffsetSeconds = 0, int startIndex = 1)
     {
         if (captions.Count == 0)
             throw new ArgumentException("At least one caption is required.", nameof(captions));
@@ -19,9 +27,9 @@ public static class SrtGenerator
         var sb = new StringBuilder();
         for (var i = 0; i < captions.Count; i++)
         {
-            var start = TimeSpan.FromSeconds(i * sceneDurationSeconds);
-            var end = TimeSpan.FromSeconds((i + 1) * sceneDurationSeconds);
-            sb.Append(i + 1).Append("\r\n");
+            var start = TimeSpan.FromSeconds(startOffsetSeconds + i * sceneDurationSeconds);
+            var end = TimeSpan.FromSeconds(startOffsetSeconds + (i + 1) * sceneDurationSeconds);
+            sb.Append(startIndex + i).Append("\r\n");
             sb.Append(FormatTimestamp(start)).Append(" --> ").Append(FormatTimestamp(end)).Append("\r\n");
             sb.Append(captions[i]).Append("\r\n");
             sb.Append("\r\n");

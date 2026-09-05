@@ -93,6 +93,27 @@ public static class ZoompanFilterBuilder
     }
 
     /// <summary>
+    /// The same scale/crop/zoompan/format chain <see cref="Build"/> emits, but with no zoom or pan
+    /// at all — a static hold, for content (a title/outro card) that shouldn't move. Omitting
+    /// zoompan's <c>z=</c> entirely leaves it at the filter's own documented default of <c>1</c>
+    /// (no zoom change frame to frame), the same "omit for the plain default" idiom
+    /// <see cref="Presets"/>'s entry 0 already uses for <c>x=</c>/<c>y=</c>.
+    /// </summary>
+    public static string BuildStaticHold(double sceneDurationSeconds, VideoComposeOptions? options = null)
+    {
+        if (sceneDurationSeconds <= 0)
+            throw new ArgumentOutOfRangeException(nameof(sceneDurationSeconds));
+        var opts = options ?? new VideoComposeOptions();
+        var frames = ComputeFrameCount(sceneDurationSeconds, opts);
+
+        return string.Join(",",
+            $"scale={opts.Width}:{opts.Height}:force_original_aspect_ratio=increase",
+            $"crop={opts.Width}:{opts.Height}",
+            string.Create(CultureInfo.InvariantCulture, $"zoompan=d={frames}:s={opts.Width}x{opts.Height}:fps={opts.Fps}"),
+            "format=yuv420p");
+    }
+
+    /// <summary>
     /// The exact output frame count the zoompan filter above is built to produce for one scene —
     /// the caller must cap ffmpeg's output at this same frame count (e.g. `-frames:v`), not at a
     /// wall-clock duration. zoompan's `d` parameter means "emit d output frames per received input
