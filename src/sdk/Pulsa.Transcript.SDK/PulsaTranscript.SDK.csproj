@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Version>0.1.0</Version>
+    <Description>Refine a speech-to-text transcript with an injected chat model — glossary-guided corrections behind a sound-alike acceptance gate, timings kept by construction, every change reported with its original. Filer-unaware.</Description>
+    <PackageTags>pulsa;transcript;stt;webvtt;glossary</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\core\Pulsa\Pulsa.csproj" />
+  </ItemGroup>
+
+</Project>
