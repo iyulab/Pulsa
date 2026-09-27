@@ -96,4 +96,20 @@ public class TranscriptRefinerTests
 
         glossary.Terms.Should().Equal("김민수", "이서연", "사은품");
     }
+
+    [Fact]
+    public async Task A_diarized_transcript_keeps_each_speaker_and_the_model_never_sees_the_voice_markup()
+    {
+        // The words are what the refiner edits; who spoke them is not its business. Parsed from a diarized WebVTT the
+        // speaker lives beside the text, so a correction replaces the words and the label rides through untouched.
+        var cues = WebVtt.Parse("WEBVTT\n\n00:00:00.000 --> 00:00:04.000\n<v Speaker 1>참석제는 저 김인수 팀장\n\n00:00:05.000 --> 00:00:09.000\n<v Speaker 2>박준호 사원입니다\n");
+        var client = Replying("[0] 참석자는 저 김민수 팀장");
+
+        var result = await TranscriptRefiner.RefineAsync(client, new RefineTranscriptRequest(cues, new Glossary(["김민수", "박준호"])));
+
+        result.Cues.Select(c => (c.Speaker, c.Text)).Should().Equal(("Speaker 1", "참석자는 저 김민수 팀장"), ("Speaker 2", "박준호 사원입니다"));
+        var prompt = string.Join('\n', client.ReceivedCalls().SelectMany(c => (IEnumerable<ChatMessage>)c.GetArguments()[0]!).Select(m => m.Text));
+        prompt.Should().NotContain("<v", "the voice span is markup, not words to correct");
+        WebVtt.Write(result.Cues).Should().Contain("<v Speaker 1>참석자는 저 김민수 팀장");
+    }
 }
