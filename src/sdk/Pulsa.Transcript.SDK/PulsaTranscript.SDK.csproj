@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <Version>0.2.0</Version>
-    <Description>Refine a speech-to-text transcript with an injected chat model — glossary-guided corrections behind a sound-alike acceptance gate, timings kept by construction, every change reported with its original. Filer-unaware.</Description>
+    <Description>Refine a speech-to-text transcript with an injected chat model — glossary-guided corrections behind a sound-alike acceptance gate, timings kept by construction, every change reported with its original. Host-agnostic.</Description>
     <PackageTags>pulsa;transcript;stt;webvtt;glossary</PackageTags>
   </PropertyGroup>
 

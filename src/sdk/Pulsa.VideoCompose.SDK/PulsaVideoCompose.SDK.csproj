@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <Version>0.3.0</Version>
-    <Description>Compose images + captions into a captioned, Ken-Burns-animated video via ffmpeg — Filer-unaware.</Description>
+    <Description>Compose images + captions into a captioned, Ken-Burns-animated video via ffmpeg — host-agnostic.</Description>
     <PackageTags>pulsa;video;ffmpeg;ken-burns</PackageTags>
   </PropertyGroup>
 

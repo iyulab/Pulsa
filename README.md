@@ -4,19 +4,44 @@
 [![NuGet Publish](https://github.com/iyulab/Pulsa/actions/workflows/nuget-publish.yml/badge.svg)](https://github.com/iyulab/Pulsa/actions/workflows/nuget-publish.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**AI-powered media and document actions for .NET.** Pulsa is a family of small, independent SDKs, each
-performing one concrete action on files — composing a video, redacting a region, refining a transcript.
-Where an action needs a language model, the caller supplies it as a `Microsoft.Extensions.AI`
-`IChatClient`; Pulsa never constructs a client or holds credentials.
+**Reusable AI features for .NET — the parts an application needs but should not build into its core.**
+
+Pulsa is a set of AI-backed features, each packaged so that more than one product can use it. A feature pairs
+an AI capability, which Pulsa takes as an interface (a `Microsoft.Extensions.AI` `IChatClient` the caller
+supplies), with the processing that makes it useful for one kind of work: parsing, validation, media handling,
+and the guarantees a model alone cannot give. Every feature is exposed through the same interface pattern:
+
+- **SDK**, always: a NuGet package with a request/result API.
+- **CLI**, optional: a standalone executable for scripts, and for hosts that run the feature in its own process.
+- **MCP server**, optional: the same feature as tools for an agent. None ships yet.
+
+A Pulsa package is not an AI product on its own. It is a component: something a product assembles into its own
+workflow.
+
+### What belongs in Pulsa
+
+An application that grows AI features runs into a middle case. Some features are too big or too specialised
+for its core. Written as one of its own plugins, they would work only inside that application. Pulsa is the
+layer for that case. A feature belongs here when:
+
+- **It is a reusable unit.** Its processing is substantial enough to test and version on its own, and another
+  product could need the same thing.
+- **It is a dependency boundary.** It brings dependencies (a native tool such as ffmpeg, a model format, a
+  heavy library) that a host should take on only when it uses the feature.
+- **It needs its own process.** A licence or a native runtime means it should run beside the host, not inside
+  it. That is what the CLI (and later MCP) surface is for.
+
+Very light AI tasks (one prompt, one call) do not need a library. They stay in the application that uses them.
+A feature whose value comes from one application's domain stays in that application's own plugin.
 
 ## Packages
 
-| Package | Description | NuGet |
-|---|---|---|
-| `Pulsa` | Shared base layer; carries `Microsoft.Extensions.AI.Abstractions` for every SDK | [![NuGet](https://img.shields.io/nuget/v/Pulsa.svg)](https://www.nuget.org/packages/Pulsa) |
-| `PulsaVideoCompose.SDK` | Compose images and captions into a captioned, Ken Burns–animated video (ffmpeg), with optional AI caption drafting | [![NuGet](https://img.shields.io/nuget/v/PulsaVideoCompose.SDK.svg)](https://www.nuget.org/packages/PulsaVideoCompose.SDK) |
-| `PulsaRedact.SDK` | Pixelate a rectangular region of an image or a time range of a video (ffmpeg) | [![NuGet](https://img.shields.io/nuget/v/PulsaRedact.SDK.svg)](https://www.nuget.org/packages/PulsaRedact.SDK) |
-| `PulsaTranscript.SDK` | Refine a speech-to-text transcript (WebVTT) with a chat model, behind a sound-alike acceptance gate | [![NuGet](https://img.shields.io/nuget/v/PulsaTranscript.SDK.svg)](https://www.nuget.org/packages/PulsaTranscript.SDK) |
+| Package | Description | Surfaces | NuGet |
+|---|---|---|---|
+| `Pulsa` | Shared base layer; carries `Microsoft.Extensions.AI.Abstractions` for every SDK | — | [![NuGet](https://img.shields.io/nuget/v/Pulsa.svg)](https://www.nuget.org/packages/Pulsa) |
+| `PulsaVideoCompose.SDK` | Compose images and captions into a captioned, Ken Burns–animated video (ffmpeg), with optional AI caption drafting | SDK · CLI | [![NuGet](https://img.shields.io/nuget/v/PulsaVideoCompose.SDK.svg)](https://www.nuget.org/packages/PulsaVideoCompose.SDK) |
+| `PulsaRedact.SDK` | Pixelate a rectangular region of an image or a time range of a video (ffmpeg) | SDK | [![NuGet](https://img.shields.io/nuget/v/PulsaRedact.SDK.svg)](https://www.nuget.org/packages/PulsaRedact.SDK) |
+| `PulsaTranscript.SDK` | Refine a speech-to-text transcript (WebVTT) with a chat model, behind a sound-alike acceptance gate | SDK | [![NuGet](https://img.shields.io/nuget/v/PulsaTranscript.SDK.svg)](https://www.nuget.org/packages/PulsaTranscript.SDK) |
 
 All packages target .NET 10. Pulsa is pre-1.0: minor versions may change the public surface.
 
@@ -105,13 +130,16 @@ File.WriteAllText("meeting.clean.vtt", WebVtt.Write(result.Cues));
 
 ## Design principles
 
-- **One action per SDK.** Each package does one job and can be adopted on its own.
+- **One feature per package.** Each package does one job and can be adopted on its own, with only the
+  dependencies that job needs.
 - **The caller owns the model.** AI steps take an injected `IChatClient`; no package creates clients,
   reads configuration, or stores credentials.
 - **Code holds the invariants.** Model output is parsed and validated deterministically — counts, timings,
   and structure are guaranteed by the library, not requested in a prompt.
-- **Host-agnostic.** No SDK knows about any particular application; [Filer](https://github.com/iyulab/filer)
-  consumes them as plugins, and any other .NET host can do the same.
+- **Host-agnostic.** No package knows about the application using it. [Filer](https://filer-ai.com) uses
+  them through its plugins, and any other .NET host can do the same.
+- **The same shape everywhere.** Each feature has a request/result API in its SDK. The CLI and MCP surfaces
+  wrap that API, so the three never drift apart.
 
 ## Repository layout
 

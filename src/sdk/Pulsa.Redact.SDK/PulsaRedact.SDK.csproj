@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <Version>0.1.0</Version>
-    <Description>Pixelate a fixed rectangular region of an image or video via ffmpeg — Filer-unaware.</Description>
+    <Description>Pixelate a fixed rectangular region of an image or video via ffmpeg — host-agnostic.</Description>
     <PackageTags>pulsa;redact;privacy;pixelate;ffmpeg</PackageTags>
   </PropertyGroup>
 
