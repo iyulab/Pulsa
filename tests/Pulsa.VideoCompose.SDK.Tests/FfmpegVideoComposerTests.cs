@@ -50,6 +50,20 @@ public class FfmpegVideoComposerTests : IDisposable
     }
 
     [Fact]
+    public async Task ComposeAsync_UnreadableCaptionStyle_ReturnsFailureWithoutTouchingFfmpeg()
+    {
+        var composer = new FfmpegVideoComposer(_tempDir, new VideoComposeOptions(
+            Captions: CaptionStyle.DefaultCaptions with { TextColor = "white" }));
+
+        var result = await composer.ComposeAsync(new ComposeVideoRequest(
+            ImagePaths: ["a.png", "b.png"], Captions: ["one", "two"], SceneDurationSeconds: 4,
+            OutputPath: Path.Combine(_tempDir, "out.mp4")));
+
+        result.Success.Should().BeFalse();
+        result.Error.Should().Contain("white");
+    }
+
+    [Fact]
     public async Task ComposeAsync_TitleImagePathWithoutTitleText_ReturnsFailureWithoutTouchingFfmpeg()
     {
         var result = await _composer.ComposeAsync(new ComposeVideoRequest(

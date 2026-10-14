@@ -25,6 +25,8 @@ static void PrintUsage()
     Console.Error.WriteLine("""
         Usage:
           PulsaVideoCompose.Cli compose --images <path...> --captions <text...> --scene-duration <seconds> --output <path> --ffmpeg-dir <dir>
+                [--aspect-ratio 16:9|9:16] [--title-image <path> --title-text <text>] [--outro-image <path> --outro-text <text>]
+                [--font <font name>]
           PulsaVideoCompose.Cli draft-captions --images <path...> --intro <text> --openai-key <key> [--openai-model <model>]
         """);
 }
@@ -36,10 +38,25 @@ static async Task<int> RunComposeAsync(string[] args)
     var captions = options["captions"];
     var ffmpegDir = options["ffmpeg-dir"][0];
     var outputPath = options["output"][0];
-    var sceneDuration = double.Parse(options["scene-duration"][0]);
+    var sceneDuration = double.Parse(options["scene-duration"][0], System.Globalization.CultureInfo.InvariantCulture);
+    // Text flags may arrive as one quoted argument or as several words; either way they are one string.
+    string? Joined(string key) => options.TryGetValue(key, out var v) && v.Length > 0 ? string.Join(' ', v) : null;
 
-    var composer = new FfmpegVideoComposer(ffmpegDir);
-    var result = await composer.ComposeAsync(new ComposeVideoRequest(images, captions, sceneDuration, outputPath));
+    var font = Joined("font");
+    var composeOptions = font is null
+        ? null
+        : new VideoComposeOptions(
+            Captions: CaptionStyle.DefaultCaptions with { FontName = font },
+            Cards: CaptionStyle.DefaultCards with { FontName = font });
+
+    var composer = new FfmpegVideoComposer(ffmpegDir, composeOptions);
+    var result = await composer.ComposeAsync(new ComposeVideoRequest(
+        images, captions, sceneDuration, outputPath,
+        AspectRatio: Joined("aspect-ratio") ?? "16:9",
+        TitleImagePath: Joined("title-image"),
+        TitleText: Joined("title-text"),
+        OutroImagePath: Joined("outro-image"),
+        OutroText: Joined("outro-text")));
 
     if (!result.Success)
     {

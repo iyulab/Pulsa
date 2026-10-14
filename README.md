@@ -74,6 +74,16 @@ var result = await composer.ComposeAsync(new ComposeVideoRequest(
 // result.OutputPath — the video; result.SrtPath — the matching subtitle file
 ```
 
+An optional title and outro card (`TitleImagePath`/`TitleText`, `OutroImagePath`/`OutroText`) open and close the
+video with large centred text. How the burned-in text looks is set per composer — sizes are fractions of the frame
+height, colours `#RRGGBB` or `#RRGGBBAA`:
+
+```csharp
+var composer = new FfmpegVideoComposer("./ffmpeg", new VideoComposeOptions(
+    Captions: CaptionStyle.DefaultCaptions with { FontName = "Noto Sans KR", BoxColor = "#1A1A2ECC" },
+    Cards: CaptionStyle.DefaultCards with { FontName = "Noto Sans KR", TextColor = "#FFD700" }));
+```
+
 Captions can be drafted from a short description with any `IChatClient`:
 
 ```csharp
@@ -89,7 +99,11 @@ PulsaVideoCompose.Cli compose \
   --captions "First caption" "Second caption" "Third caption" \
   --scene-duration 4 \
   --output out.mp4 \
-  --ffmpeg-dir ./ffmpeg
+  --ffmpeg-dir ./ffmpeg \
+  --aspect-ratio 9:16 \
+  --title-image card.png --title-text "Our product" \
+  --outro-image card.png --outro-text "Thanks for watching" \
+  --font "Noto Sans KR"
 ```
 
 ### Redaction — `PulsaRedact.SDK`

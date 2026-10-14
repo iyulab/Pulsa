@@ -46,6 +46,8 @@ public sealed class FfmpegVideoComposer
         try
         {
             effectiveOptions = AspectRatioPresets.Resolve(request.AspectRatio, _options);
+            effectiveOptions.CaptionsOrDefault.Validate();
+            effectiveOptions.CardsOrDefault.Validate();
         }
         catch (ArgumentException ex)
         {
@@ -76,12 +78,14 @@ public sealed class FfmpegVideoComposer
             // Body captions burn over the WHOLE concatenated video (title+body+outro), so their
             // timestamps must be offset by the title card's duration or they'd land during the
             // title card instead of the body — a temp file, not the returned sidecar (below).
-            var bodyBurnSrtPath = Path.Combine(workDir.FullName, "body-burn.srt");
+            var bodyBurnPath = Path.Combine(workDir.FullName, "body-burn.ass");
             await File.WriteAllTextAsync(
-                bodyBurnSrtPath,
-                SrtGenerator.Generate(request.Captions, effectiveSceneDurationSeconds, startOffsetSeconds: titleDurationSeconds),
+                bodyBurnPath,
+                AssScript.Generate(
+                    request.Captions, effectiveSceneDurationSeconds, effectiveOptions.CaptionsOrDefault, CaptionPlacement.Bottom,
+                    effectiveOptions.Width, effectiveOptions.Height, startOffsetSeconds: titleDurationSeconds),
                 cancellationToken);
-            await BurnSubtitlesAsync(concatenatedPath, bodyBurnSrtPath, request.OutputPath, cancellationToken);
+            await BurnSubtitlesAsync(concatenatedPath, bodyBurnPath, request.OutputPath, cancellationToken);
 
             // The returned .srt sidecar is the full transcript (title/outro included) even though
             // the title/outro text is already burned directly into those clips' own pixels above —
@@ -107,12 +111,17 @@ public sealed class FfmpegVideoComposer
         string workDirPath, string clipNamePrefix, CancellationToken cancellationToken)
     {
         var effectiveDuration = ZoompanFilterBuilder.ComputeEffectiveSceneDuration(sceneDurationSeconds, effectiveOptions);
-        var srtPath = Path.Combine(workDirPath, $"{clipNamePrefix}.srt");
-        await File.WriteAllTextAsync(srtPath, SrtGenerator.Generate([text], effectiveDuration), cancellationToken);
+        var cardPath = Path.Combine(workDirPath, $"{clipNamePrefix}.ass");
+        await File.WriteAllTextAsync(
+            cardPath,
+            AssScript.Generate(
+                [text], effectiveDuration, effectiveOptions.CardsOrDefault, CaptionPlacement.Center,
+                effectiveOptions.Width, effectiveOptions.Height),
+            cancellationToken);
 
         var vf = string.Join(",",
             ZoompanFilterBuilder.BuildStaticHold(sceneDurationSeconds, effectiveOptions),
-            CaptionStyleFilterBuilder.BuildTitleStyle(srtPath, effectiveOptions.Height));
+            SubtitlesFilter.Build(cardPath));
         var frameCount = ZoompanFilterBuilder.ComputeFrameCount(sceneDurationSeconds, effectiveOptions);
         var clipPath = Path.Combine(workDirPath, $"{clipNamePrefix}.mp4");
 
@@ -216,12 +225,12 @@ public sealed class FfmpegVideoComposer
     }
 
     private async Task BurnSubtitlesAsync(
-        string concatenatedPath, string srtPath, string outputPath, CancellationToken cancellationToken)
+        string concatenatedPath, string subtitlePath, string outputPath, CancellationToken cancellationToken)
     {
         await FFMpegArguments
             .FromFileInput(concatenatedPath)
             .OutputToFile(outputPath, overwrite: false, opt => opt
-                .WithCustomArgument($"-vf \"{CaptionStyleFilterBuilder.Build(srtPath)}\""))
+                .WithCustomArgument($"-vf \"{SubtitlesFilter.Build(subtitlePath)}\""))
             .CancellableThrough(cancellationToken)
             .ProcessAsynchronously(ffMpegOptions: _ffOptions);
     }
