@@ -17,10 +17,19 @@ public sealed class FfmpegVideoComposer
 {
     private readonly VideoComposeOptions _options;
     private readonly FFOptions _ffOptions;
+    private readonly string _fontProbeInput;
 
     public FfmpegVideoComposer(string ffmpegBinaryFolder, VideoComposeOptions? options = null)
+        : this(ffmpegBinaryFolder, options, fontProbeInput: "color=c=black:s=64x64:d=0.04")
+    {
+    }
+
+    /// <param name="fontProbeInput">The lavfi source the font check renders over — a seam for a test that makes the
+    /// check fail.</param>
+    internal FfmpegVideoComposer(string ffmpegBinaryFolder, VideoComposeOptions? options, string fontProbeInput)
     {
         _options = options ?? new VideoComposeOptions();
+        _fontProbeInput = fontProbeInput;
         // Per-instance, not GlobalFFOptions.Configure: that mutates process-global state shared by
         // every FFMpegCore consumer in the process, so constructing a second FfmpegVideoComposer
         // with a different binary folder would silently repoint the first one. Each stage method
@@ -48,6 +57,8 @@ public sealed class FfmpegVideoComposer
             effectiveOptions = AspectRatioPresets.Resolve(request.AspectRatio, _options);
             effectiveOptions.CaptionsOrDefault.Validate();
             effectiveOptions.CardsOrDefault.Validate();
+            if (effectiveOptions.FontsDirectory is { } fontsDirectory && !Directory.Exists(fontsDirectory))
+                throw new ArgumentException($"Fonts directory '{fontsDirectory}' does not exist.", nameof(VideoComposeOptions.FontsDirectory));
         }
         catch (ArgumentException ex)
         {
@@ -62,16 +73,18 @@ public sealed class FfmpegVideoComposer
             var titleDurationSeconds = request.TitleImagePath is not null ? effectiveSceneDurationSeconds : 0;
             var outroDurationSeconds = request.OutroImagePath is not null ? effectiveSceneDurationSeconds : 0;
 
+            // Every run that burns text logs the fonts it opened; they are read together after the last one.
+            var fontSelections = new List<FontSelection>();
             var clipPaths = new List<string>();
             if (request.TitleImagePath is not null)
                 clipPaths.Add(await RenderTitleOrOutroClipAsync(
                     request.TitleImagePath, request.TitleText!, request.SceneDurationSeconds,
-                    effectiveOptions, workDir.FullName, "title", cancellationToken));
+                    effectiveOptions, workDir.FullName, "title", fontSelections, cancellationToken));
             clipPaths.AddRange(await RenderClipsAsync(request, effectiveOptions, workDir.FullName, cancellationToken));
             if (request.OutroImagePath is not null)
                 clipPaths.Add(await RenderTitleOrOutroClipAsync(
                     request.OutroImagePath, request.OutroText!, request.SceneDurationSeconds,
-                    effectiveOptions, workDir.FullName, "outro", cancellationToken));
+                    effectiveOptions, workDir.FullName, "outro", fontSelections, cancellationToken));
 
             var concatenatedPath = await ConcatClipsAsync(clipPaths, workDir.FullName, cancellationToken);
 
@@ -85,7 +98,11 @@ public sealed class FfmpegVideoComposer
                     request.Captions, effectiveSceneDurationSeconds, effectiveOptions.CaptionsOrDefault, CaptionPlacement.Bottom,
                     effectiveOptions.Width, effectiveOptions.Height, startOffsetSeconds: titleDurationSeconds),
                 cancellationToken);
-            await BurnSubtitlesAsync(concatenatedPath, bodyBurnPath, request.OutputPath, cancellationToken);
+            await BurnSubtitlesAsync(
+                concatenatedPath, bodyBurnPath, request.OutputPath, effectiveOptions, fontSelections, cancellationToken);
+
+            var fontSubstitutions = await FindFontSubstitutionsAsync(
+                fontSelections, effectiveOptions, workDir.FullName, cancellationToken);
 
             // The returned .srt sidecar is the full transcript (title/outro included) even though
             // the title/outro text is already burned directly into those clips' own pixels above —
@@ -93,7 +110,7 @@ public sealed class FfmpegVideoComposer
             var srtPath = await WriteSubtitlesAsync(
                 request, effectiveSceneDurationSeconds, titleDurationSeconds, outroDurationSeconds, cancellationToken);
 
-            return new ComposeVideoResult(true, request.OutputPath, srtPath, null);
+            return new ComposeVideoResult(true, request.OutputPath, srtPath, null) { FontSubstitutions = fontSubstitutions };
         }
         catch (Exception ex)
         {
@@ -108,7 +125,7 @@ public sealed class FfmpegVideoComposer
 
     private async Task<string> RenderTitleOrOutroClipAsync(
         string imagePath, string text, double sceneDurationSeconds, VideoComposeOptions effectiveOptions,
-        string workDirPath, string clipNamePrefix, CancellationToken cancellationToken)
+        string workDirPath, string clipNamePrefix, List<FontSelection> fontSelections, CancellationToken cancellationToken)
     {
         var effectiveDuration = ZoompanFilterBuilder.ComputeEffectiveSceneDuration(sceneDurationSeconds, effectiveOptions);
         var cardPath = Path.Combine(workDirPath, $"{clipNamePrefix}.ass");
@@ -121,20 +138,20 @@ public sealed class FfmpegVideoComposer
 
         var vf = string.Join(",",
             ZoompanFilterBuilder.BuildStaticHold(sceneDurationSeconds, effectiveOptions),
-            SubtitlesFilter.Build(cardPath));
+            SubtitlesFilter.Build(cardPath, effectiveOptions.FontsDirectory));
         var frameCount = ZoompanFilterBuilder.ComputeFrameCount(sceneDurationSeconds, effectiveOptions);
         var clipPath = Path.Combine(workDirPath, $"{clipNamePrefix}.mp4");
 
-        await FFMpegArguments
-            .FromFileInput(imagePath, verifyExists: true, opt => opt
-                .WithCustomArgument("-loop 1"))
-            .OutputToFile(clipPath, overwrite: true, opt => opt
-                .WithCustomArgument($"-vf \"{vf}\"")
-                .WithFramerate(effectiveOptions.Fps)
-                .WithVideoCodec("libx264")
-                .WithCustomArgument($"-frames:v {frameCount}"))
-            .CancellableThrough(cancellationToken)
-            .ProcessAsynchronously(ffMpegOptions: _ffOptions);
+        await RunReadingFontsAsync(
+            FFMpegArguments
+                .FromFileInput(imagePath, verifyExists: true, opt => opt
+                    .WithCustomArgument("-loop 1"))
+                .OutputToFile(clipPath, overwrite: true, opt => opt
+                    .WithCustomArgument($"-vf \"{vf}\"")
+                    .WithFramerate(effectiveOptions.Fps)
+                    .WithVideoCodec("libx264")
+                    .WithCustomArgument($"-frames:v {frameCount}")),
+            fontSelections, cancellationToken);
 
         return clipPath;
     }
@@ -225,13 +242,84 @@ public sealed class FfmpegVideoComposer
     }
 
     private async Task BurnSubtitlesAsync(
-        string concatenatedPath, string subtitlePath, string outputPath, CancellationToken cancellationToken)
+        string concatenatedPath, string subtitlePath, string outputPath, VideoComposeOptions effectiveOptions,
+        List<FontSelection> fontSelections, CancellationToken cancellationToken)
     {
-        await FFMpegArguments
-            .FromFileInput(concatenatedPath)
-            .OutputToFile(outputPath, overwrite: false, opt => opt
-                .WithCustomArgument($"-vf \"{SubtitlesFilter.Build(subtitlePath)}\""))
+        await RunReadingFontsAsync(
+            FFMpegArguments
+                .FromFileInput(concatenatedPath)
+                .OutputToFile(outputPath, overwrite: false, opt => opt
+                    .WithCustomArgument($"-vf \"{SubtitlesFilter.Build(subtitlePath, effectiveOptions.FontsDirectory)}\"")),
+            fontSelections, cancellationToken);
+    }
+
+    /// <summary>
+    /// Which of the fonts the runs opened stand in for a family that was not found. A font whose PostScript name
+    /// carries the family it was asked for is that family's own; for any other, one more run asks for a family that
+    /// cannot exist, and a font identical to what that run falls back to is a substitution (see
+    /// <see cref="FontSelectionLog.Substitutions"/>). The extra run happens only when some font's name does not match.
+    /// The check reports on a video that is already written, so its own failure never fails the compose: it returns
+    /// null — «not determined» — instead.
+    /// </summary>
+    private async Task<IReadOnlyList<FontSubstitution>?> FindFontSubstitutionsAsync(
+        List<FontSelection> fontSelections, VideoComposeOptions effectiveOptions, string workDirPath,
+        CancellationToken cancellationToken)
+    {
+        var unmatched = fontSelections
+            .Where(s => !FontSelectionLog.NameCarriesFamily(s.Family, s.PostScriptName))
+            .ToList();
+        if (unmatched.Count == 0)
+            return [];
+
+        var fallbackFor = new Dictionary<(int Weight, bool Italic), string>();
+        try
+        {
+            foreach (var bold in unmatched.Select(s => s.Weight >= FontSelectionLog.BoldWeight).Distinct())
+                await ProbeFallbackAsync(bold, fallbackFor, effectiveOptions, workDirPath, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return null;
+        }
+
+        return FontSelectionLog.Substitutions(unmatched, fallbackFor);
+    }
+
+    /// <summary>Learns which font the renderer opens for a family that does not exist, at one weight.</summary>
+    private async Task ProbeFallbackAsync(
+        bool bold, Dictionary<(int Weight, bool Italic), string> fallbackFor, VideoComposeOptions effectiveOptions,
+        string workDirPath, CancellationToken cancellationToken)
+    {
+        var probePath = Path.Combine(workDirPath, $"font-probe-{(bold ? "bold" : "regular")}.ass");
+        await File.WriteAllTextAsync(
+            probePath,
+            AssScript.Generate(
+                ["Aa"], 1, CaptionStyle.DefaultCaptions with { FontName = FontSelectionLog.ProbeFamily, Bold = bold },
+                CaptionPlacement.Bottom, 64, 64),
+            cancellationToken);
+
+        var probeSelections = new List<FontSelection>();
+        await RunReadingFontsAsync(
+            FFMpegArguments
+                .FromFileInput(_fontProbeInput, verifyExists: false, opt => opt
+                    .ForceFormat("lavfi"))
+                .OutputToFile("-", overwrite: false, opt => opt
+                    .WithCustomArgument($"-vf \"{SubtitlesFilter.Build(probePath, effectiveOptions.FontsDirectory)}\"")
+                    .ForceFormat("null")),
+            probeSelections, cancellationToken);
+        foreach (var probe in probeSelections.Where(s => s.Family == FontSelectionLog.ProbeFamily))
+            fallbackFor[(probe.Weight, probe.Italic)] = probe.PostScriptName;
+    }
+
+    /// <summary>Runs one ffmpeg call and adds the fonts its subtitle renderer opened to <paramref name="fontSelections"/>.</summary>
+    private async Task RunReadingFontsAsync(
+        FFMpegArgumentProcessor processor, List<FontSelection> fontSelections, CancellationToken cancellationToken)
+    {
+        var log = new List<string>();
+        await processor
+            .NotifyOnError(line => { lock (log) log.Add(line); })
             .CancellableThrough(cancellationToken)
             .ProcessAsynchronously(ffMpegOptions: _ffOptions);
+        lock (log) fontSelections.AddRange(FontSelectionLog.PrimarySelections(log));
     }
 }

@@ -26,7 +26,7 @@ static void PrintUsage()
         Usage:
           PulsaVideoCompose.Cli compose --images <path...> --captions <text...> --scene-duration <seconds> --output <path> --ffmpeg-dir <dir>
                 [--aspect-ratio 16:9|9:16] [--title-image <path> --title-text <text>] [--outro-image <path> --outro-text <text>]
-                [--font <font name>]
+                [--font <font name>] [--fonts-dir <dir>]
           PulsaVideoCompose.Cli draft-captions --images <path...> --intro <text> --openai-key <key> [--openai-model <model>]
         """);
 }
@@ -43,11 +43,11 @@ static async Task<int> RunComposeAsync(string[] args)
     string? Joined(string key) => options.TryGetValue(key, out var v) && v.Length > 0 ? string.Join(' ', v) : null;
 
     var font = Joined("font");
-    var composeOptions = font is null
-        ? null
-        : new VideoComposeOptions(
-            Captions: CaptionStyle.DefaultCaptions with { FontName = font },
-            Cards: CaptionStyle.DefaultCards with { FontName = font });
+    var fontsDirectory = Joined("fonts-dir");
+    var composeOptions = new VideoComposeOptions(
+        Captions: font is null ? null : CaptionStyle.DefaultCaptions with { FontName = font },
+        Cards: font is null ? null : CaptionStyle.DefaultCards with { FontName = font },
+        FontsDirectory: fontsDirectory);
 
     var composer = new FfmpegVideoComposer(ffmpegDir, composeOptions);
     var result = await composer.ComposeAsync(new ComposeVideoRequest(
@@ -63,6 +63,11 @@ static async Task<int> RunComposeAsync(string[] args)
         Console.Error.WriteLine($"compose failed: {result.Error}");
         return 1;
     }
+    if (result.FontSubstitutions is null)
+        Console.Error.WriteLine("warning: could not check whether the named fonts were found");
+    foreach (var substitution in result.FontSubstitutions ?? [])
+        Console.Error.WriteLine(
+            $"warning: font '{substitution.RequestedFamily}'{(substitution.Bold ? " (bold)" : "")} was not found; the text was drawn in {substitution.UsedFont}");
     Console.WriteLine($"Wrote {result.OutputPath} (+ {result.SrtPath})");
     return 0;
 }

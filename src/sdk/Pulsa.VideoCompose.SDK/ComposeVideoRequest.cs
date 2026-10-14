@@ -17,4 +17,14 @@ public sealed record ComposeVideoRequest(
     string? OutroImagePath = null,
     string? OutroText = null);
 
-public sealed record ComposeVideoResult(bool Success, string? OutputPath, string? SrtPath, string? Error);
+public sealed record ComposeVideoResult(bool Success, string? OutputPath, string? SrtPath, string? Error)
+{
+    /// <summary>
+    /// Fonts a style named that the renderer did not find where ffmpeg ran (nor in
+    /// <see cref="VideoComposeOptions.FontsDirectory"/>), with the font the text was drawn in instead — as far as the
+    /// renderer's choices show it: a family that was found but drawn at another weight (the bold of a variable font)
+    /// is not reported. The video is still written. Empty when no substitution was seen; null when the check itself
+    /// could not run.
+    /// </summary>
+    public IReadOnlyList<FontSubstitution>? FontSubstitutions { get; init; } = [];
+}

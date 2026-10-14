@@ -1,3 +1,4 @@
+using FFMpegCore;
 using FluentAssertions;
 using PulsaVideoCompose;
 using Xunit;
@@ -79,7 +80,7 @@ public class FfmpegVideoComposerTests : IDisposable
     {
         var result = await _composer.ComposeAsync(new ComposeVideoRequest(
             ImagePaths: ["a.png", "b.png"], Captions: ["one", "two"], SceneDurationSeconds: 4,
-            OutputPath: Path.Combine(_tempDir, "out.mp4"), TitleText: "Filer"));
+            OutputPath: Path.Combine(_tempDir, "out.mp4"), TitleText: "Our product"));
 
         result.Success.Should().BeFalse();
         result.Error.Should().Contain("titleImagePath and titleText must both be supplied together");
@@ -101,7 +102,7 @@ public class FfmpegVideoComposerTests : IDisposable
     {
         var result = await _composer.ComposeAsync(new ComposeVideoRequest(
             ImagePaths: ["a.png", "b.png"], Captions: ["one", "two"], SceneDurationSeconds: 4,
-            OutputPath: Path.Combine(_tempDir, "out.mp4"), OutroText: "Try Filer"));
+            OutputPath: Path.Combine(_tempDir, "out.mp4"), OutroText: "Thanks for watching"));
 
         result.Success.Should().BeFalse();
         result.Error.Should().Contain("outroImagePath and outroText must both be supplied together");
@@ -120,6 +121,84 @@ public class FfmpegVideoComposerTests : IDisposable
         result.Success.Should().BeFalse();
         result.Error.Should().Contain("already exists");
         (await File.ReadAllTextAsync(outputPath)).Should().Be("not a real video"); // never touched
+    }
+
+    [Fact]
+    public async Task ComposeAsync_FontsDirectoryThatDoesNotExist_ReturnsFailureWithoutTouchingFfmpeg()
+    {
+        var missing = Path.Combine(_tempDir, "no-such-fonts");
+        var composer = new FfmpegVideoComposer(_tempDir, new VideoComposeOptions(FontsDirectory: missing));
+
+        var result = await composer.ComposeAsync(new ComposeVideoRequest(
+            ImagePaths: ["a.png", "b.png"], Captions: ["one", "two"], SceneDurationSeconds: 4,
+            OutputPath: Path.Combine(_tempDir, "out.mp4")));
+
+        result.Success.Should().BeFalse();
+        result.Error.Should().Contain(missing);
+    }
+
+    // Live: needs a real ffmpeg on PATH (CI installs one).
+    [Fact]
+    public async Task ComposeAsync_AFontThatIsNotFound_IsReportedAndTheVideoIsStillWritten()
+    {
+        var images = await CreateImagesAsync();
+        var composer = new FfmpegVideoComposer(string.Empty, new VideoComposeOptions(
+            Captions: CaptionStyle.DefaultCaptions with { FontName = "No Such Font Family 41c7" }));
+
+        var result = await composer.ComposeAsync(new ComposeVideoRequest(
+            images, ["one", "two"], SceneDurationSeconds: 1, OutputPath: Path.Combine(_tempDir, "missing-font.mp4"),
+            TitleImagePath: images[0], TitleText: "Title"));
+
+        result.Success.Should().BeTrue(result.Error);
+        File.Exists(result.OutputPath).Should().BeTrue();
+        result.FontSubstitutions.Should().ContainSingle()
+            .Which.Should().Match<FontSubstitution>(s =>
+                s.RequestedFamily == "No Such Font Family 41c7" && !s.Bold && s.UsedFont.Length > 0);
+    }
+
+    // Live: needs a real ffmpeg on PATH. The check renders over a source ffmpeg does not have, so it fails — after the
+    // video is written, which must stay a success with the check reported as not determined.
+    [Fact]
+    public async Task ComposeAsync_WhenTheFontCheckFails_TheWrittenVideoIsStillASuccess()
+    {
+        var images = await CreateImagesAsync();
+        var composer = new FfmpegVideoComposer(
+            string.Empty,
+            new VideoComposeOptions(Captions: CaptionStyle.DefaultCaptions with { FontName = "No Such Font Family 41c7" }),
+            fontProbeInput: "no_such_lavfi_source_41c7");
+
+        var result = await composer.ComposeAsync(new ComposeVideoRequest(
+            images, ["one", "two"], SceneDurationSeconds: 1, OutputPath: Path.Combine(_tempDir, "check-fails.mp4")));
+
+        result.Success.Should().BeTrue(result.Error);
+        File.Exists(result.OutputPath).Should().BeTrue();
+        result.FontSubstitutions.Should().BeNull();
+    }
+
+    // Live: needs a real ffmpeg on PATH. The default font is found, so nothing is reported — including for the cards'
+    // bold text, which takes the bold face of the same family.
+    [Fact]
+    public async Task ComposeAsync_FontsThatAreFound_ReportNoSubstitution()
+    {
+        var images = await CreateImagesAsync();
+
+        var result = await new FfmpegVideoComposer(string.Empty).ComposeAsync(new ComposeVideoRequest(
+            images, ["one", "two"], SceneDurationSeconds: 1, OutputPath: Path.Combine(_tempDir, "found-font.mp4"),
+            TitleImagePath: images[0], TitleText: "Title"));
+
+        result.Success.Should().BeTrue(result.Error);
+        result.FontSubstitutions.Should().BeEmpty();
+    }
+
+    private async Task<string[]> CreateImagesAsync()
+    {
+        var paths = new[] { Path.Combine(_tempDir, "a.png"), Path.Combine(_tempDir, "b.png") };
+        foreach (var path in paths)
+            await FFMpegArguments
+                .FromFileInput("color=c=navy:s=320x180:d=1", verifyExists: false, opt => opt.ForceFormat("lavfi"))
+                .OutputToFile(path, overwrite: true, opt => opt.WithCustomArgument("-frames:v 1"))
+                .ProcessAsynchronously(ffMpegOptions: new FFOptions { BinaryFolder = string.Empty });
+        return paths;
     }
 
     public void Dispose() => Directory.Delete(_tempDir, recursive: true);

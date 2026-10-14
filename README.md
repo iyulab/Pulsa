@@ -84,6 +84,22 @@ var composer = new FfmpegVideoComposer("./ffmpeg", new VideoComposeOptions(
     Cards: CaptionStyle.DefaultCards with { FontName = "Noto Sans KR", TextColor = "#FFD700" }));
 ```
 
+A font does not have to be installed: `FontsDirectory` names a folder of font files (`.ttf`, `.otf`, `.ttc`) that
+`FontName` can name by family, so a project can carry its own font to every machine that renders it. A family that is
+found neither there nor among the installed fonts is drawn in a system font, and the result says so as far as the
+renderer's choices show it (a bold that a variable font does not render is not caught — give bold its own static font
+file):
+
+```csharp
+var composer = new FfmpegVideoComposer("./ffmpeg", new VideoComposeOptions(
+    Captions: CaptionStyle.DefaultCaptions with { FontName = "IBM Plex Sans KR" },
+    FontsDirectory: "./fonts"));
+var result = await composer.ComposeAsync(request);
+
+foreach (var s in result.FontSubstitutions ?? [])   // null: the check could not run
+    Console.WriteLine($"{s.RequestedFamily} was not found; drawn in {s.UsedFont}");
+```
+
 Captions can be drafted from a short description with any `IChatClient`:
 
 ```csharp
@@ -103,7 +119,7 @@ PulsaVideoCompose.Cli compose \
   --aspect-ratio 9:16 \
   --title-image card.png --title-text "Our product" \
   --outro-image card.png --outro-text "Thanks for watching" \
-  --font "Noto Sans KR"
+  --font "Noto Sans KR" --fonts-dir ./fonts
 ```
 
 ### Redaction — `PulsaRedact.SDK`

@@ -7,9 +7,12 @@ namespace PulsaVideoCompose;
 /// output frame's height, so one style reads the same at 16:9 and 9:16. Where the text sits (captions at the bottom, a
 /// title/outro card in the middle) is the composer's, not the style's.
 /// </summary>
-/// <param name="FontName">A font installed where ffmpeg runs. Characters the font lacks are drawn from the system's
-/// fallback fonts — name a font that covers the captions' script (for example a CJK font for Korean or Japanese) to choose
-/// how they look. Must not contain a comma.</param>
+/// <param name="FontName">A font family installed where ffmpeg runs, or one in <see cref="VideoComposeOptions.FontsDirectory"/>.
+/// A family that is found in neither is drawn in a system font; the result reports it in
+/// <see cref="ComposeVideoResult.FontSubstitutions"/> as far as the renderer's choices show it. Characters the font lacks
+/// are drawn from the system's fallback fonts — name a font that covers the captions' script (for example a CJK font for
+/// Korean or Japanese) to choose how they look. For bold text a static bold font file is reliable; the renderer may not
+/// pick the bold instance of a variable font. Must not contain a comma.</param>
 /// <param name="FontSizeRatio">The font size as a fraction of the frame height (0.05 = 54 px on a 1080-pixel-high frame).</param>
 /// <param name="Bold">Draws the text bold.</param>
 /// <param name="TextColor">The text colour, <c>#RRGGBB</c> or <c>#RRGGBBAA</c>.</param>

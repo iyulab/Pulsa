@@ -22,4 +22,12 @@ public class SubtitlesFilterTests
 
         filter.Should().Contain(@"C\:\\videos\\out.ass");
     }
+
+    [Fact]
+    public void Build_WithAFontsDirectory_NamesItEscapedLikeTheScriptPath()
+    {
+        var filter = SubtitlesFilter.Build(@"C:\videos\out.ass", @"D:\project\fonts");
+
+        filter.Should().Be(@"subtitles='C\:\\videos\\out.ass':fontsdir='D\:\\project\\fonts'");
+    }
 }
