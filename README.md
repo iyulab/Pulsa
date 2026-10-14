@@ -166,8 +166,8 @@ File.WriteAllText("meeting.clean.vtt", WebVtt.Write(result.Cues));
   reads configuration, or stores credentials.
 - **Code holds the invariants.** Model output is parsed and validated deterministically — counts, timings,
   and structure are guaranteed by the library, not requested in a prompt.
-- **Host-agnostic.** No package knows about the application using it. [Filer](https://filer-ai.com) uses
-  them through its plugins, and any other .NET host can do the same.
+- **Host-agnostic.** No package knows about the application using it — any .NET host takes them the same
+  way, whether it calls the SDK directly, runs the CLI, or connects to the MCP server.
 - **The same shape everywhere.** Each feature has a request/result API in its SDK. The CLI and MCP surfaces
   wrap that API, so the three never drift apart.
 

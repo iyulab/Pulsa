@@ -19,7 +19,7 @@
     <!-- Others -->
     <PackageVersion Include="FFMpegCore" Version="5.4.0" />
 
-    <!-- Test stack (matches Filer's own .NET test conventions) -->
+    <!-- Test stack -->
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
     <PackageVersion Include="xunit" Version="2.9.2" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="2.8.2" />
