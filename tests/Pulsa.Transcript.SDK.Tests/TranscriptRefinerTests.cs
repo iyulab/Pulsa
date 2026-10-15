@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.Extensions.AI;
 using NSubstitute;
 using PulsaTranscript;
@@ -26,7 +26,7 @@ public class TranscriptRefinerTests
         var cues = Cues("참석제는 저 김인수 팀장", "박준호 사원입니다", "Volt enorme");
         var client = Replying("[0] 참석자는 저 김민수 팀장\n[2] [unclear]");
 
-        var result = await TranscriptRefiner.RefineAsync(client, new RefineTranscriptRequest(cues, new Glossary(["김민수", "박준호"])));
+        var result = await TranscriptRefiner.RefineAsync(client, new RefineTranscriptRequest(cues, new Glossary(["김민수", "박준호"])), cancellationToken: TestContext.Current.CancellationToken);
 
         result.Cues.Select(c => c.Text).Should().Equal("참석자는 저 김민수 팀장", "박준호 사원입니다", TranscriptRefiner.Unclear);
         result.Cues.Select(c => (c.Start, c.End)).Should().Equal(cues.Select(c => (c.Start, c.End)));
@@ -42,7 +42,7 @@ public class TranscriptRefinerTests
         var cues = Cues("1주 금요일까지 이 센 승인을 받아 오겠습니다");
         var client = Replying("[0] 1주 금요일까지 배너 시안 승인을 받아 오겠습니다");
 
-        var result = await TranscriptRefiner.RefineAsync(client, new RefineTranscriptRequest(cues, new Glossary(["배너 시안"])));
+        var result = await TranscriptRefiner.RefineAsync(client, new RefineTranscriptRequest(cues, new Glossary(["배너 시안"])), cancellationToken: TestContext.Current.CancellationToken);
 
         result.Cues[0].Text.Should().Be("1주 금요일까지 이 센 승인을 받아 오겠습니다");
         result.Applied.Should().BeEmpty();
@@ -55,7 +55,7 @@ public class TranscriptRefinerTests
         var cues = Cues("같은 장수에서 진행하겠습니다.");
         var client = Replying("Here are the corrections:\n[0] 같은 장소에서 진행하겠습니다.\n[7] invented\nDone.");
 
-        var result = await TranscriptRefiner.RefineAsync(client, new RefineTranscriptRequest(cues, Glossary.Empty));
+        var result = await TranscriptRefiner.RefineAsync(client, new RefineTranscriptRequest(cues, Glossary.Empty), cancellationToken: TestContext.Current.CancellationToken);
 
         result.Cues[0].Text.Should().Be("같은 장소에서 진행하겠습니다.");
         result.Applied.Should().ContainSingle();
@@ -67,8 +67,7 @@ public class TranscriptRefinerTests
         var cues = Cues("a0", "a1", "a2", "a3", "a4");
         var client = Replying("[1] a1x", "[3] a3x", "");
 
-        var result = await TranscriptRefiner.RefineAsync(client,
-            new RefineTranscriptRequest(cues, Glossary.Empty), new RefineTranscriptOptions { BatchSize = 2 });
+        var result = await TranscriptRefiner.RefineAsync(client, new RefineTranscriptRequest(cues, Glossary.Empty), new RefineTranscriptOptions { BatchSize = 2 }, TestContext.Current.CancellationToken);
 
         await client.Received(3).GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>());
         result.Applied.Select(c => c.Index).Should().Equal(1, 3);
@@ -83,7 +82,7 @@ public class TranscriptRefinerTests
         client.GetResponseAsync(Arg.Do<IEnumerable<ChatMessage>>(m => sent = m.ToList()), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
             .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "")));
 
-        await TranscriptRefiner.RefineAsync(client, new RefineTranscriptRequest(cues, new Glossary(["김민수"])));
+        await TranscriptRefiner.RefineAsync(client, new RefineTranscriptRequest(cues, new Glossary(["김민수"])), cancellationToken: TestContext.Current.CancellationToken);
 
         var text = string.Join("\n", sent!.Select(m => m.Text));
         text.Should().Contain("김민수").And.Contain("[0] 첫 문장").And.Contain("[1] 둘째 문장");
@@ -105,7 +104,7 @@ public class TranscriptRefinerTests
         var cues = WebVtt.Parse("WEBVTT\n\n00:00:00.000 --> 00:00:04.000\n<v Speaker 1>참석제는 저 김인수 팀장\n\n00:00:05.000 --> 00:00:09.000\n<v Speaker 2>박준호 사원입니다\n");
         var client = Replying("[0] 참석자는 저 김민수 팀장");
 
-        var result = await TranscriptRefiner.RefineAsync(client, new RefineTranscriptRequest(cues, new Glossary(["김민수", "박준호"])));
+        var result = await TranscriptRefiner.RefineAsync(client, new RefineTranscriptRequest(cues, new Glossary(["김민수", "박준호"])), cancellationToken: TestContext.Current.CancellationToken);
 
         result.Cues.Select(c => (c.Speaker, c.Text)).Should().Equal(("Speaker 1", "참석자는 저 김민수 팀장"), ("Speaker 2", "박준호 사원입니다"));
         var prompt = string.Join('\n', client.ReceivedCalls().SelectMany(c => (IEnumerable<ChatMessage>)c.GetArguments()[0]!).Select(m => m.Text));

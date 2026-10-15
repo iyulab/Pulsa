@@ -1,5 +1,5 @@
 using FFMpegCore;
-using FluentAssertions;
+using AwesomeAssertions;
 using PulsaVideoCompose;
 using Xunit;
 
@@ -22,7 +22,7 @@ public class FfmpegVideoComposerTests : IDisposable
     {
         var result = await _composer.ComposeAsync(new ComposeVideoRequest(
             ImagePaths: ["only.png"], Captions: ["one"], SceneDurationSeconds: 4,
-            OutputPath: Path.Combine(_tempDir, "out.mp4")));
+            OutputPath: Path.Combine(_tempDir, "out.mp4")), TestContext.Current.CancellationToken);
 
         result.Success.Should().BeFalse();
         result.Error.Should().Contain("At least 2 images");
@@ -33,7 +33,7 @@ public class FfmpegVideoComposerTests : IDisposable
     {
         var result = await _composer.ComposeAsync(new ComposeVideoRequest(
             ImagePaths: ["a.png", "b.png"], Captions: ["only one"], SceneDurationSeconds: 4,
-            OutputPath: Path.Combine(_tempDir, "out.mp4")));
+            OutputPath: Path.Combine(_tempDir, "out.mp4")), TestContext.Current.CancellationToken);
 
         result.Success.Should().BeFalse();
         result.Error.Should().Contain("captions must have exactly one entry per image");
@@ -44,7 +44,7 @@ public class FfmpegVideoComposerTests : IDisposable
     {
         var result = await _composer.ComposeAsync(new ComposeVideoRequest(
             ImagePaths: ["a.png", "b.png"], Captions: ["one", "two"], SceneDurationSeconds: 4,
-            OutputPath: Path.Combine(_tempDir, "out.mp4"), AspectRatio: "4:3"));
+            OutputPath: Path.Combine(_tempDir, "out.mp4"), AspectRatio: "4:3"), TestContext.Current.CancellationToken);
 
         result.Success.Should().BeFalse();
         result.Error.Should().Contain("4:3");
@@ -58,7 +58,7 @@ public class FfmpegVideoComposerTests : IDisposable
 
         var result = await composer.ComposeAsync(new ComposeVideoRequest(
             ImagePaths: ["a.png", "b.png"], Captions: ["one", "two"], SceneDurationSeconds: 4,
-            OutputPath: Path.Combine(_tempDir, "out.mp4")));
+            OutputPath: Path.Combine(_tempDir, "out.mp4")), TestContext.Current.CancellationToken);
 
         result.Success.Should().BeFalse();
         result.Error.Should().Contain("white");
@@ -69,7 +69,7 @@ public class FfmpegVideoComposerTests : IDisposable
     {
         var result = await _composer.ComposeAsync(new ComposeVideoRequest(
             ImagePaths: ["a.png", "b.png"], Captions: ["one", "two"], SceneDurationSeconds: 4,
-            OutputPath: Path.Combine(_tempDir, "out.mp4"), TitleImagePath: "logo.png"));
+            OutputPath: Path.Combine(_tempDir, "out.mp4"), TitleImagePath: "logo.png"), TestContext.Current.CancellationToken);
 
         result.Success.Should().BeFalse();
         result.Error.Should().Contain("titleImagePath and titleText must both be supplied together");
@@ -80,7 +80,7 @@ public class FfmpegVideoComposerTests : IDisposable
     {
         var result = await _composer.ComposeAsync(new ComposeVideoRequest(
             ImagePaths: ["a.png", "b.png"], Captions: ["one", "two"], SceneDurationSeconds: 4,
-            OutputPath: Path.Combine(_tempDir, "out.mp4"), TitleText: "Our product"));
+            OutputPath: Path.Combine(_tempDir, "out.mp4"), TitleText: "Our product"), TestContext.Current.CancellationToken);
 
         result.Success.Should().BeFalse();
         result.Error.Should().Contain("titleImagePath and titleText must both be supplied together");
@@ -91,7 +91,7 @@ public class FfmpegVideoComposerTests : IDisposable
     {
         var result = await _composer.ComposeAsync(new ComposeVideoRequest(
             ImagePaths: ["a.png", "b.png"], Captions: ["one", "two"], SceneDurationSeconds: 4,
-            OutputPath: Path.Combine(_tempDir, "out.mp4"), OutroImagePath: "logo.png"));
+            OutputPath: Path.Combine(_tempDir, "out.mp4"), OutroImagePath: "logo.png"), TestContext.Current.CancellationToken);
 
         result.Success.Should().BeFalse();
         result.Error.Should().Contain("outroImagePath and outroText must both be supplied together");
@@ -102,7 +102,7 @@ public class FfmpegVideoComposerTests : IDisposable
     {
         var result = await _composer.ComposeAsync(new ComposeVideoRequest(
             ImagePaths: ["a.png", "b.png"], Captions: ["one", "two"], SceneDurationSeconds: 4,
-            OutputPath: Path.Combine(_tempDir, "out.mp4"), OutroText: "Thanks for watching"));
+            OutputPath: Path.Combine(_tempDir, "out.mp4"), OutroText: "Thanks for watching"), TestContext.Current.CancellationToken);
 
         result.Success.Should().BeFalse();
         result.Error.Should().Contain("outroImagePath and outroText must both be supplied together");
@@ -112,15 +112,15 @@ public class FfmpegVideoComposerTests : IDisposable
     public async Task ComposeAsync_OutputPathAlreadyExists_RefusesToOverwrite()
     {
         var outputPath = Path.Combine(_tempDir, "existing.mp4");
-        await File.WriteAllTextAsync(outputPath, "not a real video");
+        await File.WriteAllTextAsync(outputPath, "not a real video", TestContext.Current.CancellationToken);
 
         var result = await _composer.ComposeAsync(new ComposeVideoRequest(
             ImagePaths: ["a.png", "b.png"], Captions: ["one", "two"], SceneDurationSeconds: 4,
-            OutputPath: outputPath));
+            OutputPath: outputPath), TestContext.Current.CancellationToken);
 
         result.Success.Should().BeFalse();
         result.Error.Should().Contain("already exists");
-        (await File.ReadAllTextAsync(outputPath)).Should().Be("not a real video"); // never touched
+        (await File.ReadAllTextAsync(outputPath, TestContext.Current.CancellationToken)).Should().Be("not a real video"); // never touched
     }
 
     [Fact]
@@ -131,7 +131,7 @@ public class FfmpegVideoComposerTests : IDisposable
 
         var result = await composer.ComposeAsync(new ComposeVideoRequest(
             ImagePaths: ["a.png", "b.png"], Captions: ["one", "two"], SceneDurationSeconds: 4,
-            OutputPath: Path.Combine(_tempDir, "out.mp4")));
+            OutputPath: Path.Combine(_tempDir, "out.mp4")), TestContext.Current.CancellationToken);
 
         result.Success.Should().BeFalse();
         result.Error.Should().Contain(missing);
@@ -147,7 +147,7 @@ public class FfmpegVideoComposerTests : IDisposable
 
         var result = await composer.ComposeAsync(new ComposeVideoRequest(
             images, ["one", "two"], SceneDurationSeconds: 1, OutputPath: Path.Combine(_tempDir, "missing-font.mp4"),
-            TitleImagePath: images[0], TitleText: "Title"));
+            TitleImagePath: images[0], TitleText: "Title"), TestContext.Current.CancellationToken);
 
         result.Success.Should().BeTrue(result.Error);
         File.Exists(result.OutputPath).Should().BeTrue();
@@ -168,7 +168,7 @@ public class FfmpegVideoComposerTests : IDisposable
             fontProbeInput: "no_such_lavfi_source_41c7");
 
         var result = await composer.ComposeAsync(new ComposeVideoRequest(
-            images, ["one", "two"], SceneDurationSeconds: 1, OutputPath: Path.Combine(_tempDir, "check-fails.mp4")));
+            images, ["one", "two"], SceneDurationSeconds: 1, OutputPath: Path.Combine(_tempDir, "check-fails.mp4")), TestContext.Current.CancellationToken);
 
         result.Success.Should().BeTrue(result.Error);
         File.Exists(result.OutputPath).Should().BeTrue();
@@ -184,7 +184,7 @@ public class FfmpegVideoComposerTests : IDisposable
 
         var result = await new FfmpegVideoComposer(string.Empty).ComposeAsync(new ComposeVideoRequest(
             images, ["one", "two"], SceneDurationSeconds: 1, OutputPath: Path.Combine(_tempDir, "found-font.mp4"),
-            TitleImagePath: images[0], TitleText: "Title"));
+            TitleImagePath: images[0], TitleText: "Title"), TestContext.Current.CancellationToken);
 
         result.Success.Should().BeTrue(result.Error);
         result.FontSubstitutions.Should().BeEmpty();

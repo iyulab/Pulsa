@@ -1,5 +1,5 @@
 using FFMpegCore;
-using FluentAssertions;
+using AwesomeAssertions;
 using PulsaRedact;
 using Xunit;
 
@@ -30,10 +30,10 @@ public class MediaRedactorTests : IDisposable
     public async Task RedactAsync_OutputAlreadyExists_ReturnsFailureWithoutTouchingFfmpeg()
     {
         var outputPath = Path.Combine(_tempDir, "out.png");
-        await File.WriteAllBytesAsync(outputPath, [0]);
+        await File.WriteAllBytesAsync(outputPath, [0], TestContext.Current.CancellationToken);
 
         var result = await _redactor.RedactAsync(new RedactRequest(
-            InputPath: "in.png", OutputPath: outputPath, X: 0, Y: 0, Width: 10, Height: 10));
+            InputPath: "in.png", OutputPath: outputPath, X: 0, Y: 0, Width: 10, Height: 10), TestContext.Current.CancellationToken);
 
         result.Success.Should().BeFalse();
         result.Error.Should().Contain($"{outputPath} already exists");
@@ -44,7 +44,7 @@ public class MediaRedactorTests : IDisposable
     {
         var result = await _redactor.RedactAsync(new RedactRequest(
             InputPath: Path.Combine(_tempDir, "missing.png"),
-            OutputPath: Path.Combine(_tempDir, "out.png"), X: 0, Y: 0, Width: 10, Height: 10));
+            OutputPath: Path.Combine(_tempDir, "out.png"), X: 0, Y: 0, Width: 10, Height: 10), TestContext.Current.CancellationToken);
 
         result.Success.Should().BeFalse();
         result.Error.Should().Contain("missing.png");
@@ -54,7 +54,7 @@ public class MediaRedactorTests : IDisposable
     public async Task RedactAsync_TimeRangeOnStillImage_IgnoresIt_DoesNotThrow()
     {
         var inputPath = Path.Combine(_tempDir, "in.png");
-        await File.WriteAllBytesAsync(inputPath, [0]); // existence check only at this stage of the test
+        await File.WriteAllBytesAsync(inputPath, [0], TestContext.Current.CancellationToken); // existence check only at this stage of the test
 
         // This test only proves the time-range fields don't cause a validation-level exception for
         // an image input before ffmpeg is ever invoked — it deliberately supplies a byte-garbage PNG
@@ -64,7 +64,7 @@ public class MediaRedactorTests : IDisposable
         // simply ignored rather than rejected up front.
         var result = await _redactor.RedactAsync(new RedactRequest(
             InputPath: inputPath, OutputPath: Path.Combine(_tempDir, "out.png"),
-            X: 0, Y: 0, Width: 10, Height: 10, StartTime: 1, EndTime: 2));
+            X: 0, Y: 0, Width: 10, Height: 10, StartTime: 1, EndTime: 2), TestContext.Current.CancellationToken);
 
         result.Success.Should().BeFalse();
         result.Error.Should().NotContain("startTime and endTime"); // not PixelateFilterBuilder's own guard
@@ -84,7 +84,7 @@ public class MediaRedactorTests : IDisposable
         // make that hang/fail differently) -- the exception is thrown during Build, before
         // FFMpegArguments is even constructed.
         var inputPath = Path.Combine(_tempDir, "in.mp4");
-        await File.WriteAllBytesAsync(inputPath, [0]);
+        await File.WriteAllBytesAsync(inputPath, [0], TestContext.Current.CancellationToken);
 
         var act = () => _redactor.RedactAsync(new RedactRequest(
             InputPath: inputPath, OutputPath: Path.Combine(_tempDir, "out.mp4"),
@@ -176,12 +176,12 @@ public class MediaRedactorTests : IDisposable
         const int x = 10, y = 10, width = 50, height = 30;
 
         var result = await redactor.RedactAsync(new RedactRequest(
-            InputPath: inputPath, OutputPath: outputPath, X: x, Y: y, Width: width, Height: height));
+            InputPath: inputPath, OutputPath: outputPath, X: x, Y: y, Width: width, Height: height), TestContext.Current.CancellationToken);
 
         result.Success.Should().BeTrue(because: result.Error);
         File.Exists(outputPath).Should().BeTrue();
         new FileInfo(outputPath).Length.Should().BeGreaterThan(0);
-        var probe = await FFProbe.AnalyseAsync(outputPath, ffOptions: new FFOptions { BinaryFolder = ResolveFfmpegBinaryFolder() });
+        var probe = await FFProbe.AnalyseAsync(outputPath, ffOptions: new FFOptions { BinaryFolder = ResolveFfmpegBinaryFolder() }, cancellationToken: TestContext.Current.CancellationToken);
         probe.PrimaryVideoStream!.Width.Should().Be(200);
         probe.PrimaryVideoStream.Height.Should().Be(100);
 
@@ -220,7 +220,7 @@ public class MediaRedactorTests : IDisposable
         const int x = 40, y = 20, width = 10, height = 8; // both smaller than default blockSize=16
 
         var result = await redactor.RedactAsync(new RedactRequest(
-            InputPath: inputPath, OutputPath: outputPath, X: x, Y: y, Width: width, Height: height));
+            InputPath: inputPath, OutputPath: outputPath, X: x, Y: y, Width: width, Height: height), TestContext.Current.CancellationToken);
 
         result.Success.Should().BeTrue(because: result.Error);
         var regionBefore = await CropToRawRgbAsync(inputPath, x, y, width, height);
@@ -236,10 +236,10 @@ public class MediaRedactorTests : IDisposable
         var outputPath = Path.Combine(_tempDir, "clip-redacted.mp4");
 
         var result = await redactor.RedactAsync(new RedactRequest(
-            InputPath: inputPath, OutputPath: outputPath, X: 10, Y: 10, Width: 50, Height: 30));
+            InputPath: inputPath, OutputPath: outputPath, X: 10, Y: 10, Width: 50, Height: 30), TestContext.Current.CancellationToken);
 
         result.Success.Should().BeTrue();
-        var probe = await FFProbe.AnalyseAsync(outputPath, ffOptions: new FFOptions { BinaryFolder = ResolveFfmpegBinaryFolder() });
+        var probe = await FFProbe.AnalyseAsync(outputPath, ffOptions: new FFOptions { BinaryFolder = ResolveFfmpegBinaryFolder() }, cancellationToken: TestContext.Current.CancellationToken);
         probe.Duration.TotalSeconds.Should().BeApproximately(2, precision: 0.5);
     }
 
@@ -258,10 +258,10 @@ public class MediaRedactorTests : IDisposable
 
         var result = await redactor.RedactAsync(new RedactRequest(
             InputPath: inputPath, OutputPath: outputPath,
-            X: 10, Y: 10, Width: 50, Height: 30, StartTime: 1, EndTime: 3));
+            X: 10, Y: 10, Width: 50, Height: 30, StartTime: 1, EndTime: 3), TestContext.Current.CancellationToken);
 
         result.Success.Should().BeTrue(because: result.Error);
-        var probe = await FFProbe.AnalyseAsync(outputPath, ffOptions: new FFOptions { BinaryFolder = ResolveFfmpegBinaryFolder() });
+        var probe = await FFProbe.AnalyseAsync(outputPath, ffOptions: new FFOptions { BinaryFolder = ResolveFfmpegBinaryFolder() }, cancellationToken: TestContext.Current.CancellationToken);
         probe.Duration.TotalSeconds.Should().BeApproximately(4, precision: 0.5);
     }
 }

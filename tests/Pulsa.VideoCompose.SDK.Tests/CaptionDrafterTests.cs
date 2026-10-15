@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.Extensions.AI;
 using NSubstitute;
 using PulsaVideoCompose;
@@ -16,9 +16,7 @@ public class CaptionDrafterTests
             .GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
             .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "First caption\nSecond caption\nThird caption")));
 
-        var captions = await CaptionDrafter.DraftAsync(
-            chatClient,
-            new DraftCaptionsRequest(["a.png", "b.png", "c.png"], "A product demo video."));
+        var captions = await CaptionDrafter.DraftAsync(chatClient, new DraftCaptionsRequest(["a.png", "b.png", "c.png"], "A product demo video."), TestContext.Current.CancellationToken);
 
         captions.Should().Equal("First caption", "Second caption", "Third caption");
     }
@@ -31,8 +29,7 @@ public class CaptionDrafterTests
             .GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
             .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "- First\n\n* Second\n")));
 
-        var captions = await CaptionDrafter.DraftAsync(
-            chatClient, new DraftCaptionsRequest(["a.png", "b.png"], "intro"));
+        var captions = await CaptionDrafter.DraftAsync(chatClient, new DraftCaptionsRequest(["a.png", "b.png"], "intro"), TestContext.Current.CancellationToken);
 
         captions.Should().Equal("First", "Second");
     }
@@ -69,7 +66,7 @@ public class CaptionDrafterTests
             .GetResponseAsync(Arg.Do<IEnumerable<ChatMessage>>(msgs => capturedPrompt = msgs.Single().Text), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
             .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "a\nb")));
 
-        await CaptionDrafter.DraftAsync(chatClient, new DraftCaptionsRequest(["a.png", "b.png"], "A Product Hunt launch video."));
+        await CaptionDrafter.DraftAsync(chatClient, new DraftCaptionsRequest(["a.png", "b.png"], "A Product Hunt launch video."), TestContext.Current.CancellationToken);
 
         capturedPrompt.Should().Contain("2-scene");
         capturedPrompt.Should().Contain("A Product Hunt launch video.");

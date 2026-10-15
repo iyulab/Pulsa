@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using PulsaVideoCompose;
 using Xunit;
 
@@ -13,9 +13,9 @@ public class ConcatListWriterTests : IDisposable
     {
         var listPath = Path.Combine(_tempDir, "concat.txt");
 
-        await ConcatListWriter.WriteAsync(["a.mp4", "b.mp4", "c.mp4"], listPath);
+        await ConcatListWriter.WriteAsync(["a.mp4", "b.mp4", "c.mp4"], listPath, TestContext.Current.CancellationToken);
 
-        var lines = await File.ReadAllLinesAsync(listPath);
+        var lines = await File.ReadAllLinesAsync(listPath, TestContext.Current.CancellationToken);
         lines.Should().Equal("file 'a.mp4'", "file 'b.mp4'", "file 'c.mp4'");
     }
 
@@ -24,9 +24,9 @@ public class ConcatListWriterTests : IDisposable
     {
         var listPath = Path.Combine(_tempDir, "concat.txt");
 
-        await ConcatListWriter.WriteAsync(["o'brien.mp4"], listPath);
+        await ConcatListWriter.WriteAsync(["o'brien.mp4"], listPath, TestContext.Current.CancellationToken);
 
-        var content = await File.ReadAllTextAsync(listPath);
+        var content = await File.ReadAllTextAsync(listPath, TestContext.Current.CancellationToken);
         content.Should().Contain(@"file 'o'\''brien.mp4'");
     }
 
