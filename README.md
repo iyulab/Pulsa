@@ -4,35 +4,38 @@
 [![NuGet Publish](https://github.com/iyulab/Pulsa/actions/workflows/nuget-publish.yml/badge.svg)](https://github.com/iyulab/Pulsa/actions/workflows/nuget-publish.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**Reusable AI features for .NET — the parts an application needs but should not build into its core.**
+**Reusable capabilities for AI agents and applications — the parts they need but should not build into their core.**
 
-Pulsa is a set of AI-backed features, each packaged so that more than one product can use it. A feature pairs
-an AI capability, which Pulsa takes as an interface (a `Microsoft.Extensions.AI` `IChatClient` the caller
-supplies), with the processing that makes it useful for one kind of work: parsing, validation, media handling,
-and the guarantees a model alone cannot give. Every feature is exposed through the same interface pattern:
+Pulsa is a set of AI-backed capabilities, each packaged so that more than one product can use it. A capability pairs
+an AI model, which Pulsa takes as an interface (a `Microsoft.Extensions.AI` `IChatClient` the caller supplies), with the
+processing that makes it useful for one kind of work: parsing, validation, media handling, and the guarantees a model
+alone cannot give. A capability is reached across a process boundary or through a library, and the language an
+implementation is written in is not part of the contract (every package today is .NET):
 
-- **SDK**, always: a NuGet package with a request/result API.
-- **CLI**, optional: a standalone executable for scripts, and for hosts that run the feature in its own process.
-- **MCP server**, optional: the same feature as tools for an agent. None ships yet.
+- **CLI**: a standalone executable for scripts, and for hosts that run the capability in its own process.
+- **MCP server**: the same capability as tools and events for an agent. None ships yet; it is the surface a
+  language-neutral Pulsa is built around.
+- **SDK**: a per-language library binding with a request/result API. Every package today ships a NuGet SDK.
 
 A Pulsa package is not an AI product on its own. It is a component: something a product assembles into its own
 workflow.
 
 ### What belongs in Pulsa
 
-An application that grows AI features runs into a middle case. Some features are too big or too specialised
-for its core. Written as one of its own plugins, they would work only inside that application. Pulsa is the
-layer for that case. A feature belongs here when:
+Pulsa is the layer for reusable capabilities that an AI agent or an application needs but should not build into its
+core. A capability belongs here when:
 
 - **It is a reusable unit.** Its processing is substantial enough to test and version on its own, and another
   product could need the same thing.
-- **It is a dependency boundary.** It brings dependencies (a native tool such as ffmpeg, a model format, a
-  heavy library) that a host should take on only when it uses the feature.
-- **It needs its own process.** A licence or a native runtime means it should run beside the host, not inside
-  it. That is what the CLI (and later MCP) surface is for.
+- **It is a dependency boundary or needs its own process.** It brings dependencies (a native tool such as ffmpeg, a
+  model format, a heavy library) that a host should take on only when it uses the capability, or a licence or a
+  native runtime means it should run beside the host, not inside it. That is what the CLI and MCP surfaces are for.
+- **It reaches an agent as tools or events.** Only a capability an agent can be handed, as tools it calls or events
+  it reacts to, is admitted.
 
-Very light AI tasks (one prompt, one call) do not need a library. They stay in the application that uses them.
-A feature whose value comes from one application's domain stays in that application's own plugin.
+A single prompt or a single call is not a capability and stays in the application. A capability whose value comes
+from one application's domain stays in that application's own plugin. Who accepts a new capability, and on what
+evidence, is in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Packages
 
