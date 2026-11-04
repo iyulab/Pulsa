@@ -19,16 +19,31 @@ jobs:
       redact-sdk: ${{ steps.redact-sdk.outputs.publish }}
       transcript-sdk: ${{ steps.transcript-sdk.outputs.publish }}
     steps:
+      # The whole history: a push can carry several commits, and a version change in any of them
+      # counts. Reading only the last commit (HEAD~1..HEAD) missed a version bump that was not the
+      # push's tip.
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          fetch-depth: 0
+
+      - name: Files this push changed
+        shell: bash
+        run: |
+          before="${{ github.event.before }}"
+          zeros="0000000000000000000000000000000000000000"
+          if [ -n "$before" ] && [ "$before" != "$zeros" ] && git cat-file -e "${before}^{commit}" 2>/dev/null; then
+            git diff --name-only "$before" "$GITHUB_SHA" > "$RUNNER_TEMP/changed.txt"
+          else
+            # A first push of a branch, or a force-push that dropped the old tip: the tip's own change.
+            git diff --name-only "${GITHUB_SHA}~1" "$GITHUB_SHA" > "$RUNNER_TEMP/changed.txt"
+          fi
 
       - name: Check Pulsa
         id: pulsa
         shell: bash
         run: |
           csproj="src/core/Pulsa/Pulsa.csproj"
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ] || git diff HEAD~1 HEAD --name-only | grep -q "$csproj"; then
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ] || grep -qxF "$csproj" "$RUNNER_TEMP/changed.txt"; then
             version=$(sed -n 's/.*<Version>\([^<]*\)<.*/\1/p' "$csproj")
             echo "publish=true" >> $GITHUB_OUTPUT
             echo "version=${version}" >> $GITHUB_OUTPUT
@@ -41,7 +56,7 @@ jobs:
         shell: bash
         run: |
           csproj="src/sdk/Pulsa.VideoCompose.SDK/PulsaVideoCompose.SDK.csproj"
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ] || git diff HEAD~1 HEAD --name-only | grep -q "$csproj"; then
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ] || grep -qxF "$csproj" "$RUNNER_TEMP/changed.txt"; then
             version=$(sed -n 's/.*<Version>\([^<]*\)<.*/\1/p' "$csproj")
             echo "publish=true" >> $GITHUB_OUTPUT
             echo "version=${version}" >> $GITHUB_OUTPUT
@@ -54,7 +69,7 @@ jobs:
         shell: bash
         run: |
           csproj="src/sdk/Pulsa.Redact.SDK/PulsaRedact.SDK.csproj"
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ] || git diff HEAD~1 HEAD --name-only | grep -q "$csproj"; then
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ] || grep -qxF "$csproj" "$RUNNER_TEMP/changed.txt"; then
             version=$(sed -n 's/.*<Version>\([^<]*\)<.*/\1/p' "$csproj")
             echo "publish=true" >> $GITHUB_OUTPUT
             echo "version=${version}" >> $GITHUB_OUTPUT
@@ -67,7 +82,7 @@ jobs:
         shell: bash
         run: |
           csproj="src/sdk/Pulsa.Transcript.SDK/PulsaTranscript.SDK.csproj"
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ] || git diff HEAD~1 HEAD --name-only | grep -q "$csproj"; then
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ] || grep -qxF "$csproj" "$RUNNER_TEMP/changed.txt"; then
             version=$(sed -n 's/.*<Version>\([^<]*\)<.*/\1/p' "$csproj")
             echo "publish=true" >> $GITHUB_OUTPUT
             echo "version=${version}" >> $GITHUB_OUTPUT
