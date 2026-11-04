@@ -3,7 +3,18 @@ namespace PulsaChannel;
 /// <summary>Where a provider reports what happens on its connection.</summary>
 public interface IChannelEventSink
 {
-    void Publish(ChannelEvent channelEvent);
+    /// <returns>The <see cref="ChannelEvent.Seq"/> the event was given.</returns>
+    long Publish(ChannelEvent channelEvent);
+}
+
+/// <summary>
+/// A provider whose service must be told when a message has been taken over, and that can hold that confirmation back until the
+/// consumer has read past the event (so a message the connector holds but the consumer has not fetched is delivered again after a restart).
+/// </summary>
+public interface IChannelAcknowledge
+{
+    /// <summary>The consumer's cursor has passed every event with a <see cref="ChannelEvent.Seq"/> up to and including this one.</summary>
+    void Acknowledge(long throughSeq);
 }
 
 /// <summary>

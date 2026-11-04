@@ -48,10 +48,12 @@ instead of failing silently:
   old `epoch` back (or a cursor ahead of anything this run has produced) gets `reset: true` and the read starts from the beginning.
 - `gap: true` means events between the cursor and the first one returned were dropped because more than 1000 arrived unread.
 
-Delivery toward the consumer is at least once within a run, and a consumer de-duplicates by `messageId`. Toward the service it is
-at most once for a provider whose service confirms a message when it is read (Telegram does): a message the connector has read
-but the agent has not yet fetched is lost if the connector stops. Moving the service's confirmation after the consumer's cursor is
-the fix and is not built yet.
+Delivery toward the consumer is at least once, and a consumer de-duplicates by `messageId`. A provider whose service confirms a
+message when it is read (Telegram does) holds that confirmation back until the consumer's cursor has passed the event: the
+cursor a consumer hands to `channel_poll` is what tells the provider the message was taken over. A message the connector holds
+but the consumer has not yet fetched is therefore delivered again after a restart — at the cost of the service repeating
+unconfirmed updates, which the provider reads and drops without publishing, polling about once a second while any are
+unconfirmed. A consumer that stops polling stops confirming, and the backlog stays on the service's side.
 
 ## Errors
 

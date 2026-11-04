@@ -35,13 +35,15 @@ public sealed class ChannelEventQueue : IChannelEventSink
         get { lock (gate) { return last; } }
     }
 
-    public void Publish(ChannelEvent channelEvent)
+    public long Publish(ChannelEvent channelEvent)
     {
         ArgumentNullException.ThrowIfNull(channelEvent);
         TaskCompletionSource toWake;
+        long seq;
         lock (gate)
         {
             last++;
+            seq = last;
             events.Add(channelEvent with { Seq = last, At = time.GetUtcNow() });
             if (events.Count > capacity) events.RemoveAt(0);
             toWake = arrival;
@@ -49,6 +51,7 @@ public sealed class ChannelEventQueue : IChannelEventSink
         }
 
         toWake.TrySetResult();
+        return seq;
     }
 
     /// <summary>

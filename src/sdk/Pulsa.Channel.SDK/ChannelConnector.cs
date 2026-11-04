@@ -55,6 +55,7 @@ public sealed class ChannelConnector : IAsyncDisposable
         // A cursor from another run says nothing about this one: sequence numbers start again from 1 after a restart.
         var reset = (epoch is not null && epoch != Events.Epoch) || after > Events.Last;
         if (reset) after = 0;
+        else if (after > 0 && provider is IChannelAcknowledge acknowledge) acknowledge.Acknowledge(after);
         var oldest = Events.Oldest;
         var gap = !reset && oldest > 0 && after + 1 < oldest;
         var events = await Events.PollAsync(after, max, timeout, cancellationToken).ConfigureAwait(false);

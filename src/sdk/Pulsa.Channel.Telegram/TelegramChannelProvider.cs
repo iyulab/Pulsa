@@ -10,7 +10,7 @@ namespace PulsaChannel.Telegram;
 /// caller gives. Only private (one-to-one) chats are read; messages without text are skipped. The bot token is part of every request
 /// address, so nothing this provider returns or throws is built from a request address.
 /// </summary>
-public sealed class TelegramChannelProvider : IChannelProvider, IChannelProbe
+public sealed class TelegramChannelProvider : IChannelProvider, IChannelProbe, IChannelAcknowledge
 {
     /// <summary>The Bot API's longest message.</summary>
     public const int TelegramMaxTextLength = 4096;
@@ -19,6 +19,13 @@ public sealed class TelegramChannelProvider : IChannelProvider, IChannelProbe
     private readonly string token;
     private readonly TimeProvider time;
     private readonly TimeSpan longPoll;
+    private readonly TimeSpan backlogDelay;
+    private readonly object ackGate = new();
+    // Updates read from the service and not yet confirmed to it, oldest first: the update's id and the event it became (null when it became none).
+    private readonly List<(long UpdateId, long? Seq)> unconfirmed = [];
+    private long consumedSeq;
+    private long confirmedOffset;
+    private long publishedThrough = -1;
     private readonly object gate = new();
     private CancellationTokenSource? stop;
     private Task? loop;
@@ -28,14 +35,16 @@ public sealed class TelegramChannelProvider : IChannelProvider, IChannelProbe
 
     /// <param name="token">The bot token. Held only to build request addresses.</param>
     /// <param name="http">The client to use. Its <see cref="HttpClient.BaseAddress"/> is the Bot API root (<c>https://api.telegram.org/</c> when unset) and its timeout must exceed <paramref name="longPollTimeout"/>.</param>
+    /// <param name="backlogPause">How long to wait before asking again when the service only repeated updates already read (they stay unconfirmed until the consumer has read past them).</param>
     /// <param name="longPollTimeout">How long one <c>getUpdates</c> call waits at the service for a message (whole seconds).</param>
-    public TelegramChannelProvider(string token, HttpClient http, TimeProvider? time = null, TimeSpan? longPollTimeout = null)
+    public TelegramChannelProvider(string token, HttpClient http, TimeProvider? time = null, TimeSpan? longPollTimeout = null, TimeSpan? backlogPause = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(token);
         this.token = token;
         this.http = http ?? throw new ArgumentNullException(nameof(http));
         this.time = time ?? TimeProvider.System;
         longPoll = longPollTimeout ?? TimeSpan.FromSeconds(25);
+        backlogDelay = backlogPause ?? TimeSpan.FromSeconds(1);
         since = this.time.GetUtcNow();
     }
 
@@ -133,12 +142,13 @@ public sealed class TelegramChannelProvider : IChannelProvider, IChannelProbe
 
     private async Task PollLoopAsync(CancellationToken cancellationToken)
     {
-        long offset = 0;
         var backoff = TimeSpan.FromSeconds(1);
         while (!cancellationToken.IsCancellationRequested)
         {
             try
             {
+                long offset;
+                lock (ackGate) { offset = confirmedOffset; }
                 using var response = await http.PostAsJsonAsync(
                     Method("getUpdates"),
                     new { offset, timeout = (int)longPoll.TotalSeconds, allowed_updates = new[] { "message" } },
@@ -158,11 +168,29 @@ public sealed class TelegramChannelProvider : IChannelProvider, IChannelProbe
 
                 backoff = TimeSpan.FromSeconds(1);
                 if (state != ChannelState.Connected) Change(ChannelState.Connected);
+                var fresh = 0;
                 foreach (var update in updates)
                 {
-                    // The cursor moves past every update that names itself, so one the provider cannot read is skipped once, not fetched again forever.
-                    if (Long(update?["update_id"]) is { } updateId) offset = Math.Max(offset, updateId + 1);
-                    PublishIfMessage(update);
+                    if (Long(update?["update_id"]) is not { } updateId)
+                    {
+                        // Cannot be confirmed or told apart from a repeat: read it if it is readable, nothing more.
+                        PublishIfMessage(update);
+                        continue;
+                    }
+
+                    // Updates not yet confirmed to the service come back on every call; the ones already read are not published again.
+                    if (updateId <= publishedThrough) continue;
+                    var seq = PublishIfMessage(update);
+                    publishedThrough = updateId;
+                    lock (ackGate) { unconfirmed.Add((updateId, seq)); }
+                    fresh++;
+                }
+
+                Confirm();
+                if (updates.Count > 0 && fresh == 0)
+                {
+                    // Only repeats: the service answers at once while anything is unconfirmed, so ask again after a pause rather than in a tight loop.
+                    await Task.Delay(backlogDelay, time, cancellationToken).ConfigureAwait(false);
                 }
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -179,14 +207,35 @@ public sealed class TelegramChannelProvider : IChannelProvider, IChannelProbe
         }
     }
 
-    private void PublishIfMessage(JsonNode? update)
+    private long? PublishIfMessage(JsonNode? update)
     {
         var message = update?["message"];
-        if (message is null || Text(message["chat"]?["type"]) != "private") return;
-        if (Text(message["text"]) is not { Length: > 0 } text) return;
-        if (Long(message["chat"]?["id"]) is not { } chat || Long(message["message_id"]) is not { } messageId) return;
+        if (message is null || Text(message["chat"]?["type"]) != "private") return null;
+        if (Text(message["text"]) is not { Length: > 0 } text) return null;
+        if (Long(message["chat"]?["id"]) is not { } chat || Long(message["message_id"]) is not { } messageId) return null;
         var sender = Long(message["from"]?["id"]) ?? chat;
-        sink?.Publish(new MessageReceived(chat.ToString(), sender.ToString(), text, $"{chat}:{messageId}", time.GetUtcNow()));
+        return sink?.Publish(new MessageReceived(chat.ToString(), sender.ToString(), text, $"{chat}:{messageId}", time.GetUtcNow()));
+    }
+
+    /// <summary>The consumer has read past every event up to <paramref name="throughSeq"/>; the service may now be told those updates are taken.</summary>
+    public void Acknowledge(long throughSeq)
+    {
+        lock (ackGate) { consumedSeq = Math.Max(consumedSeq, throughSeq); }
+        Confirm();
+    }
+
+    // The offset sent to the service moves past an update only when every update up to it is consumed (or became no event), because the
+    // service forgets everything below the offset it is given. A restart before that point reads the unconfirmed updates again.
+    private void Confirm()
+    {
+        lock (ackGate)
+        {
+            while (unconfirmed.Count > 0 && (unconfirmed[0].Seq is null || unconfirmed[0].Seq <= consumedSeq))
+            {
+                confirmedOffset = unconfirmed[0].UpdateId + 1;
+                unconfirmed.RemoveAt(0);
+            }
+        }
     }
 
     // The service's JSON is read without assuming its shape: a field of another type is "not there", never an exception.

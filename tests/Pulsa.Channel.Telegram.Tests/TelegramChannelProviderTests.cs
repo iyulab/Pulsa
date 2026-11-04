@@ -17,7 +17,7 @@ public class TelegramChannelProviderTests
     private static TelegramChannelProvider ProviderOver(Func<HttpRequestMessage, string, CancellationToken, Task<HttpResponseMessage>> respond, out Handler handler)
     {
         handler = new Handler(respond);
-        return new TelegramChannelProvider(Token, new HttpClient(handler) { BaseAddress = new Uri("https://api.telegram.org/") }, longPollTimeout: TimeSpan.FromSeconds(1));
+        return new TelegramChannelProvider(Token, new HttpClient(handler) { BaseAddress = new Uri("https://api.telegram.org/") }, longPollTimeout: TimeSpan.FromSeconds(1), backlogPause: TimeSpan.FromMilliseconds(20));
     }
 
     [Fact]
@@ -75,44 +75,88 @@ public class TelegramChannelProviderTests
         handler.Requests.Should().BeEmpty();
     }
 
-    [Fact]
-    public async Task Only_private_text_messages_become_events_and_the_next_poll_asks_after_the_newest_update()
-    {
-        var calls = 0;
-        var provider = ProviderOver(async (_, _, token) =>
-        {
-            if (Interlocked.Increment(ref calls) == 1)
-            {
-                return Json(HttpStatusCode.OK, """
-                    {"ok":true,"result":[
-                      {"update_id":10,"message":{"message_id":1,"from":{"id":42},"chat":{"id":555,"type":"private"},"text":"hello"}},
-                      {"update_id":11,"message":{"message_id":2,"from":{"id":42},"chat":{"id":-100,"type":"group"},"text":"to a group"}},
-                      {"update_id":12,"message":{"message_id":3,"from":{"id":42},"chat":{"id":555,"type":"private"}}},
-                      {"update_id":13,"edited_message":{"message_id":4}}
-                    ]}
-                    """);
-            }
+    private static readonly (long Id, string Json)[] ServiceUpdates =
+    [
+        (10, """{"update_id":10,"message":{"message_id":1,"from":{"id":42},"chat":{"id":555,"type":"private"},"text":"hello"}}"""),
+        (11, """{"update_id":11,"message":{"message_id":2,"from":{"id":42},"chat":{"id":-100,"type":"group"},"text":"to a group"}}"""),
+        (12, """{"update_id":12,"message":{"message_id":3,"from":{"id":42},"chat":{"id":555,"type":"private"}}}"""),
+        (13, """{"update_id":13,"edited_message":{"message_id":4}}"""),
+    ];
 
-            await Task.Delay(30, token);
-            return Json(HttpStatusCode.OK, """{"ok":true,"result":[]}""");
-        }, out var handler);
+    // The service as Telegram behaves: it answers at once with every update at or above the offset it is given, and forgets those below it.
+    private static Func<HttpRequestMessage, string, CancellationToken, Task<HttpResponseMessage>> Service(IEnumerable<(long Id, string Json)> updates, long[] floor)
+    {
+        var all = updates.ToArray();
+        return async (_, body, token) =>
+        {
+            var offset = JsonNode.Parse(body)!["offset"]!.GetValue<long>();
+            lock (floor) { floor[0] = Math.Max(floor[0], offset); }
+            var remaining = all.Where(u => u.Id >= floor[0]).Select(u => u.Json).ToList();
+            if (remaining.Count == 0) await Task.Delay(30, token);
+            return Json(HttpStatusCode.OK, $$"""{"ok":true,"result":[{{string.Join(",", remaining)}}]}""");
+        };
+    }
+
+    private static async Task<bool> UntilAsync(Func<bool> condition)
+    {
+        for (var i = 0; i < 200 && !condition(); i++) await Task.Delay(25, TestContext.Current.CancellationToken);
+        return condition();
+    }
+
+    private static IEnumerable<long> Offsets(Handler handler) => handler.Requests.Where(r => r.Path.EndsWith("/getUpdates")).Select(r => JsonNode.Parse(r.Body)!["offset"]!.GetValue<long>());
+
+    [Fact]
+    public async Task Only_private_text_messages_become_events_and_the_service_is_told_only_after_the_consumer_has_read_past_them()
+    {
+        var provider = ProviderOver(Service(ServiceUpdates, [0]), out var handler);
         var events = new ChannelEventQueue();
 
         await provider.StartAsync(events, TestContext.Current.CancellationToken);
-        var read = await events.PollAsync(0, 10, TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
-        while (read.Count < 3) read = await events.PollAsync(0, 10, TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
-        // The second poll is made right after the first answer is handled; wait for it rather than assume it already happened.
-        for (var i = 0; i < 100 && handler.Requests.Count(r => r.Path.EndsWith("/getUpdates")) < 2; i++) await Task.Delay(50, TestContext.Current.CancellationToken);
-        await provider.DisposeAsync();
+        (await UntilAsync(() => Offsets(handler).Count() >= 4)).Should().BeTrue("the service keeps repeating what is unconfirmed");
+        var read = (await events.PollAsync(0, 20, TimeSpan.Zero, TestContext.Current.CancellationToken)).ToList();
 
         read.OfType<ConnectionChanged>().Select(e => e.State).Should().StartWith([ChannelState.Connecting, ChannelState.Connected]);
-        read.OfType<MessageReceived>().Should().ContainSingle().Which.Should().BeEquivalentTo(
-            new { Conversation = "555", Sender = "42", Text = "hello", MessageId = "555:1" },
-            options => options.ExcludingMissingMembers());
-        var offsets = handler.Requests.Where(r => r.Path.EndsWith("/getUpdates")).Select(r => JsonNode.Parse(r.Body)!["offset"]!.GetValue<long>()).ToList();
-        offsets[0].Should().Be(0);
-        offsets[1].Should().Be(14);
+        var message = read.OfType<MessageReceived>().Should().ContainSingle("the repeats are not published again").Which;
+        message.Should().BeEquivalentTo(new { Conversation = "555", Sender = "42", Text = "hello", MessageId = "555:1" }, options => options.ExcludingMissingMembers());
+        Offsets(handler).Should().OnlyContain(o => o == 0, "nothing is confirmed while the consumer has not read the message");
+
+        provider.Acknowledge(message.Seq);
+
+        (await UntilAsync(() => Offsets(handler).Contains(14))).Should().BeTrue("the message is read, and the updates that became no event were waiting behind it");
+        (await events.PollAsync(0, 20, TimeSpan.Zero, TestContext.Current.CancellationToken)).OfType<MessageReceived>().Should().ContainSingle();
+        await provider.DisposeAsync();
         provider.Status.State.Should().Be(ChannelState.Stopped);
+    }
+
+    [Fact]
+    public async Task A_message_the_consumer_never_fetched_is_delivered_again_after_a_restart()
+    {
+        var floor = new long[1];
+        var two = new (long Id, string Json)[]
+        {
+            (10, """{"update_id":10,"message":{"message_id":1,"from":{"id":42},"chat":{"id":555,"type":"private"},"text":"first"}}"""),
+            (11, """{"update_id":11,"message":{"message_id":2,"from":{"id":42},"chat":{"id":555,"type":"private"},"text":"second"}}"""),
+        };
+        var service = Service(two, floor);
+        var firstRun = ProviderOver(service, out var firstHandler);
+        var firstEvents = new ChannelEventQueue();
+        await firstRun.StartAsync(firstEvents, TestContext.Current.CancellationToken);
+        (await UntilAsync(() => firstEvents.Last >= 4)).Should().BeTrue();
+        var first = (await firstEvents.PollAsync(0, 20, TimeSpan.Zero, TestContext.Current.CancellationToken)).OfType<MessageReceived>().First(m => m.Text == "first");
+
+        firstRun.Acknowledge(first.Seq);
+        (await UntilAsync(() => Offsets(firstHandler).Contains(11))).Should().BeTrue();
+        await firstRun.DisposeAsync();
+
+        var secondRun = ProviderOver(service, out _);
+        var secondEvents = new ChannelEventQueue();
+        await secondRun.StartAsync(secondEvents, TestContext.Current.CancellationToken);
+        (await UntilAsync(() => secondEvents.Last >= 3)).Should().BeTrue();
+        var again = (await secondEvents.PollAsync(0, 20, TimeSpan.Zero, TestContext.Current.CancellationToken)).OfType<MessageReceived>().ToList();
+        await secondRun.DisposeAsync();
+
+        floor[0].Should().Be(11);
+        again.Select(m => m.Text).Should().Equal(["second"], "the first was read before the restart, the second was not");
     }
 
     [Fact]
@@ -182,7 +226,9 @@ public class TelegramChannelProviderTests
         read.OfType<MessageReceived>().Select(m => m.Text).Should().Equal("unreadable id", "good one");
         read.OfType<ConnectionChanged>().Select(e => e.State).Should().NotContain(ChannelState.Reconnecting);
         status.Should().Be(ChannelState.Connected);
-        handler.Requests.Where(r => r.Path.EndsWith("/getUpdates")).Select(r => JsonNode.Parse(r.Body)!["offset"]!.GetValue<long>()).ElementAt(1).Should().Be(22, "the cursor passed every update that named itself");
+        // The unreadable one became no event, so the cursor passes it (21) but not the good one, which the consumer has not read past (22).
+        var offsets = handler.Requests.Where(r => r.Path.EndsWith("/getUpdates")).Select(r => JsonNode.Parse(r.Body)!["offset"]!.GetValue<long>()).ToList();
+        offsets.Should().Contain(21).And.NotContain(22);
     }
 
     [Theory]

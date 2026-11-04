@@ -225,6 +225,45 @@ public class ChannelConnectorTests
         caughtUp.Events.Select(e => e.Seq).Should().Equal(6);
     }
 
+    [Fact]
+    public async Task A_provider_is_told_how_far_the_consumer_has_read_but_not_when_the_cursor_was_reset()
+    {
+        var inner = new FakeChannelProvider();
+        var provider = new AcknowledgingProvider(inner);
+        var connector = new ChannelConnector(provider);
+        await connector.StartAsync(TestContext.Current.CancellationToken);
+        inner.Receive("conversation-1", "person-a", "hello");
+        var token = TestContext.Current.CancellationToken;
+
+        await connector.PollAsync(0, null, 10, TimeSpan.Zero, token);
+        await connector.PollAsync(2, null, 10, TimeSpan.Zero, token);
+        await connector.PollAsync(500, null, 10, TimeSpan.Zero, token);
+        await connector.PollAsync(2, "a-run-that-ended", 10, TimeSpan.Zero, token);
+
+        provider.Acknowledged.Should().Equal([2L], "a first read acknowledges nothing, a cursor the consumer really held does, and a reset cursor says nothing about this run");
+    }
+
+    private sealed class AcknowledgingProvider(FakeChannelProvider inner) : IChannelProvider, IChannelAcknowledge
+    {
+        public List<long> Acknowledged { get; } = [];
+
+        public string Name => inner.Name;
+
+        public int MaxTextLength => inner.MaxTextLength;
+
+        public ChannelStatus Status => inner.Status;
+
+        public Task StartAsync(IChannelEventSink sink, CancellationToken cancellationToken) => inner.StartAsync(sink, cancellationToken);
+
+        public Task<ChannelSendResult> SendAsync(ChannelSendRequest request, CancellationToken cancellationToken) => inner.SendAsync(request, cancellationToken);
+
+        public Task StopAsync(CancellationToken cancellationToken) => inner.StopAsync(cancellationToken);
+
+        public ValueTask DisposeAsync() => inner.DisposeAsync();
+
+        public void Acknowledge(long throughSeq) => Acknowledged.Add(throughSeq);
+    }
+
     private sealed class ThrowingProvider(string credential) : IChannelProvider
     {
         public string Name => "throwing";
