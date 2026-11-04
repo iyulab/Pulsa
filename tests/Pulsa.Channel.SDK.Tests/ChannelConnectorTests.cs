@@ -124,7 +124,7 @@ public class ChannelConnectorTests
         provider.Receive("conversation-1", "person-a", "first");
         provider.Receive("conversation-1", "person-a", "second");
 
-        var events = await connector.PollAsync(0, 10, TimeSpan.Zero, TestContext.Current.CancellationToken);
+        var events = (await connector.PollAsync(0, null, 10, TimeSpan.Zero, TestContext.Current.CancellationToken)).Events;
 
         events.Select(e => e.Seq).Should().Equal(1, 2, 3);
         events[0].Should().BeOfType<ConnectionChanged>().Which.Type.Should().Be("connection_changed");
@@ -137,11 +137,11 @@ public class ChannelConnectorTests
     {
         var (connector, provider) = await StartedAsync();
         provider.Receive("conversation-1", "person-a", "first");
-        var firstRead = await connector.PollAsync(0, 10, TimeSpan.Zero, TestContext.Current.CancellationToken);
+        var firstRead = (await connector.PollAsync(0, null, 10, TimeSpan.Zero, TestContext.Current.CancellationToken)).Events;
         provider.Receive("conversation-1", "person-a", "second");
 
-        var second = await connector.PollAsync(firstRead[^1].Seq, 10, TimeSpan.Zero, TestContext.Current.CancellationToken);
-        var again = await connector.PollAsync(0, 10, TimeSpan.Zero, TestContext.Current.CancellationToken);
+        var second = (await connector.PollAsync(firstRead[^1].Seq, null, 10, TimeSpan.Zero, TestContext.Current.CancellationToken)).Events;
+        var again = (await connector.PollAsync(0, null, 10, TimeSpan.Zero, TestContext.Current.CancellationToken)).Events;
 
         second.Should().ContainSingle().Which.Should().BeOfType<MessageReceived>().Which.Text.Should().Be("second");
         again.Should().HaveCount(3, "a read does not consume — a lost reply loses nothing");
@@ -153,10 +153,10 @@ public class ChannelConnectorTests
         var (connector, provider) = await StartedAsync();
         var seen = connector.Events.Last;
 
-        var empty = await connector.PollAsync(seen, 10, TimeSpan.FromMilliseconds(50), TestContext.Current.CancellationToken);
-        var waiting = connector.PollAsync(seen, 10, TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+        var empty = (await connector.PollAsync(seen, null, 10, TimeSpan.FromMilliseconds(50), TestContext.Current.CancellationToken)).Events;
+        var waiting = connector.PollAsync(seen, null, 10, TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
         provider.Receive("conversation-1", "person-a", "hello");
-        var arrived = await waiting;
+        var arrived = (await waiting).Events;
 
         empty.Should().BeEmpty();
         arrived.Should().ContainSingle().Which.Should().BeOfType<MessageReceived>();
@@ -167,11 +167,11 @@ public class ChannelConnectorTests
     {
         var (connector, _) = await StartedAsync();
 
-        Action tooMany = () => _ = connector.PollAsync(0, 101, TimeSpan.Zero, TestContext.Current.CancellationToken);
-        Action tooLong = () => _ = connector.PollAsync(0, 10, TimeSpan.FromSeconds(31), TestContext.Current.CancellationToken);
+        Func<Task> tooMany = () => connector.PollAsync(0, null, 101, TimeSpan.Zero, TestContext.Current.CancellationToken);
+        Func<Task> tooLong = () => connector.PollAsync(0, null, 10, TimeSpan.FromSeconds(31), TestContext.Current.CancellationToken);
 
-        tooMany.Should().Throw<ArgumentOutOfRangeException>();
-        tooLong.Should().Throw<ArgumentOutOfRangeException>();
+        await tooMany.Should().ThrowAsync<ArgumentOutOfRangeException>();
+        await tooLong.Should().ThrowAsync<ArgumentOutOfRangeException>();
     }
 
     [Fact]
@@ -183,6 +183,46 @@ public class ChannelConnectorTests
         var kept = await queue.PollAsync(0, 10, TimeSpan.Zero, TestContext.Current.CancellationToken);
 
         kept.Select(e => e.Seq).Should().Equal(3, 4, 5);
+    }
+
+    [Fact]
+    public async Task A_cursor_from_another_run_is_told_to_start_over_instead_of_silently_getting_nothing()
+    {
+        var (connector, provider) = await StartedAsync();
+        provider.Receive("conversation-1", "person-a", "hello");
+        var token = TestContext.Current.CancellationToken;
+
+        var staleEpoch = await connector.PollAsync(2, "an-epoch-of-a-run-that-ended", 10, TimeSpan.Zero, token);
+        var aheadOfThisRun = await connector.PollAsync(500, null, 10, TimeSpan.Zero, token);
+        var current = await connector.PollAsync(2, staleEpoch.Epoch, 10, TimeSpan.Zero, token);
+
+        staleEpoch.Reset.Should().BeTrue();
+        staleEpoch.Events.Select(e => e.Seq).Should().Equal(1, 2);
+        aheadOfThisRun.Reset.Should().BeTrue();
+        aheadOfThisRun.Events.Should().HaveCount(2);
+        current.Reset.Should().BeFalse();
+        current.Events.Should().BeEmpty();
+        current.Epoch.Should().Be(staleEpoch.Epoch);
+    }
+
+    [Fact]
+    public async Task Events_dropped_because_too_many_arrived_unread_are_reported_as_a_gap()
+    {
+        var provider = new FakeChannelProvider();
+        var connector = new ChannelConnector(provider, events: new ChannelEventQueue(capacity: 3));
+        await connector.StartAsync(TestContext.Current.CancellationToken);
+        for (var i = 0; i < 5; i++) provider.Receive("conversation-1", "person-a", $"message {i}");
+        var token = TestContext.Current.CancellationToken;
+
+        var behind = await connector.PollAsync(1, null, 10, TimeSpan.Zero, token);
+        var fromStart = await connector.PollAsync(0, null, 10, TimeSpan.Zero, token);
+        var caughtUp = await connector.PollAsync(5, null, 10, TimeSpan.Zero, token);
+
+        behind.Gap.Should().BeTrue("events 2 to 3 were dropped before this read");
+        behind.Events.Select(e => e.Seq).Should().Equal(4, 5, 6);
+        fromStart.Gap.Should().BeTrue();
+        caughtUp.Gap.Should().BeFalse();
+        caughtUp.Events.Select(e => e.Seq).Should().Equal(6);
     }
 
     private sealed class ThrowingProvider(string credential) : IChannelProvider

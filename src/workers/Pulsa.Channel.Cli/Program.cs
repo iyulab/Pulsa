@@ -39,7 +39,9 @@ switch (command)
     case "serve":
         {
             await connector.StartAsync(cancel.Token);
-            var server = new McpStdioServer(connector, Console.In, Console.Out);
+            // Standard input is read as UTF-8 whatever the console's code page is (on Windows a redirected Console.In decodes by the code page).
+            using var stdin = new StreamReader(Console.OpenStandardInput(), new System.Text.UTF8Encoding(false));
+            var server = new McpStdioServer(connector, stdin, Console.Out);
             await server.RunAsync(cancel.Token);
             await connector.StopAsync(CancellationToken.None);
             return 0;
@@ -62,13 +64,24 @@ switch (command)
 
     case "status":
         {
-            await connector.StartAsync(cancel.Token);
-            // One look at the connection: give a first attempt up to ten seconds to settle.
-            var until = DateTimeOffset.UtcNow.AddSeconds(10);
-            while (connector.Status.State == ChannelState.Connecting && DateTimeOffset.UtcNow < until) await Task.Delay(100, cancel.Token);
-            Console.WriteLine(ChannelJson.Status(connector.Status).ToJsonString());
-            await connector.StopAsync(CancellationToken.None);
-            return connector.Status.State == ChannelState.Connected ? 0 : 1;
+            ChannelStatus status;
+            if (provider is IChannelProbe probe)
+            {
+                // A real service: look without reading. Starting the provider would pull messages and confirm them to the service.
+                status = await probe.ProbeAsync(cancel.Token);
+            }
+            else
+            {
+                await connector.StartAsync(cancel.Token);
+                // One look at the connection: give a first attempt up to ten seconds to settle.
+                var until = DateTimeOffset.UtcNow.AddSeconds(10);
+                while (connector.Status.State == ChannelState.Connecting && DateTimeOffset.UtcNow < until) await Task.Delay(100, cancel.Token);
+                status = connector.Status;
+                await connector.StopAsync(CancellationToken.None);
+            }
+
+            Console.WriteLine(ChannelJson.Status(status).ToJsonString());
+            return status.State == ChannelState.Connected ? 0 : 1;
         }
 
     case "listen":
@@ -81,7 +94,7 @@ switch (command)
             {
                 while (!cancel.IsCancellationRequested)
                 {
-                    foreach (var e in await connector.PollAsync(after, 100, TimeSpan.FromSeconds(30), cancel.Token))
+                    foreach (var e in (await connector.PollAsync(after, null, 100, TimeSpan.FromSeconds(30), cancel.Token)).Events)
                     {
                         Console.WriteLine(ChannelJson.Event(e).ToJsonString());
                         after = e.Seq;

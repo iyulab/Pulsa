@@ -6,6 +6,15 @@ public interface IChannelEventSink
     void Publish(ChannelEvent channelEvent);
 }
 
+/// <summary>
+/// A provider that can answer "is the connection usable?" without starting to read messages. Reading is what confirms messages to
+/// some services, so a one-shot status check must not use <see cref="IChannelProvider.StartAsync"/>.
+/// </summary>
+public interface IChannelProbe
+{
+    Task<ChannelStatus> ProbeAsync(CancellationToken cancellationToken);
+}
+
 /// <summary>One messaging service behind the shared contract.</summary>
 public interface IChannelProvider : IAsyncDisposable
 {

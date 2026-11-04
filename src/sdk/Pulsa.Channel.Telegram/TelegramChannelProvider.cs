@@ -10,7 +10,7 @@ namespace PulsaChannel.Telegram;
 /// caller gives. Only private (one-to-one) chats are read; messages without text are skipped. The bot token is part of every request
 /// address, so nothing this provider returns or throws is built from a request address.
 /// </summary>
-public sealed class TelegramChannelProvider : IChannelProvider
+public sealed class TelegramChannelProvider : IChannelProvider, IChannelProbe
 {
     /// <summary>The Bot API's longest message.</summary>
     public const int TelegramMaxTextLength = 4096;
@@ -79,12 +79,31 @@ public sealed class TelegramChannelProvider : IChannelProvider
         using (response)
         {
             var body = await ReadAsync(response, cancellationToken).ConfigureAwait(false);
-            if (body?["ok"]?.GetValue<bool>() == true && body["result"]?["message_id"] is { } id)
+            if (Flag(body?["ok"]) == true && Long(body?["result"]?["message_id"]) is { } id)
             {
-                return ChannelSendResult.Ok($"{request.Conversation}:{id.GetValue<long>()}");
+                return ChannelSendResult.Ok($"{request.Conversation}:{id}");
             }
 
             return Map(response.StatusCode, body);
+        }
+    }
+
+    /// <summary>Asks <c>getMe</c>, which reads no messages, so it confirms nothing to the service.</summary>
+    public async Task<ChannelStatus> ProbeAsync(CancellationToken cancellationToken)
+    {
+        ChannelStatus Status(ChannelState state, string? detail = null) => new(Name, state, time.GetUtcNow(), detail);
+        try
+        {
+            using var response = await http.PostAsync(Method("getMe"), null, cancellationToken).ConfigureAwait(false);
+            var body = await ReadAsync(response, cancellationToken).ConfigureAwait(false);
+            if (Flag(body?["ok"]) == true) return Status(ChannelState.Connected);
+            return response.StatusCode == HttpStatusCode.Unauthorized
+                ? Status(ChannelState.Stopped, "the service refused the credential")
+                : Status(ChannelState.Reconnecting, "the service did not answer as expected");
+        }
+        catch (Exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            return Status(ChannelState.Reconnecting, "the service could not be reached");
         }
     }
 
@@ -125,7 +144,7 @@ public sealed class TelegramChannelProvider : IChannelProvider
                     new { offset, timeout = (int)longPoll.TotalSeconds, allowed_updates = new[] { "message" } },
                     cancellationToken).ConfigureAwait(false);
                 var body = await ReadAsync(response, cancellationToken).ConfigureAwait(false);
-                if (body?["ok"]?.GetValue<bool>() != true || body["result"] is not JsonArray updates)
+                if (Flag(body?["ok"]) != true || body?["result"] is not JsonArray updates)
                 {
                     // 401 means the token is refused: there is nothing to retry into.
                     if (response.StatusCode == HttpStatusCode.Unauthorized)
@@ -141,7 +160,8 @@ public sealed class TelegramChannelProvider : IChannelProvider
                 if (state != ChannelState.Connected) Change(ChannelState.Connected);
                 foreach (var update in updates)
                 {
-                    offset = Math.Max(offset, update?["update_id"]?.GetValue<long>() + 1 ?? offset);
+                    // The cursor moves past every update that names itself, so one the provider cannot read is skipped once, not fetched again forever.
+                    if (Long(update?["update_id"]) is { } updateId) offset = Math.Max(offset, updateId + 1);
                     PublishIfMessage(update);
                 }
             }
@@ -149,7 +169,7 @@ public sealed class TelegramChannelProvider : IChannelProvider
             {
                 return;
             }
-            catch (Exception e) when (e is HttpRequestException or TaskCanceledException or JsonException)
+            catch (Exception) when (!cancellationToken.IsCancellationRequested)
             {
                 if (state != ChannelState.Reconnecting) Change(ChannelState.Reconnecting);
                 try { await Task.Delay(backoff, time, cancellationToken).ConfigureAwait(false); }
@@ -162,13 +182,19 @@ public sealed class TelegramChannelProvider : IChannelProvider
     private void PublishIfMessage(JsonNode? update)
     {
         var message = update?["message"];
-        if (message is null || message["chat"]?["type"]?.GetValue<string>() != "private") return;
-        if (message["text"]?.GetValue<string>() is not { Length: > 0 } text) return;
-        var chat = message["chat"]!["id"]!.GetValue<long>();
-        var sender = message["from"]?["id"]?.GetValue<long>().ToString() ?? chat.ToString();
-        var messageId = message["message_id"]!.GetValue<long>();
-        sink?.Publish(new MessageReceived(chat.ToString(), sender, text, $"{chat}:{messageId}", time.GetUtcNow()));
+        if (message is null || Text(message["chat"]?["type"]) != "private") return;
+        if (Text(message["text"]) is not { Length: > 0 } text) return;
+        if (Long(message["chat"]?["id"]) is not { } chat || Long(message["message_id"]) is not { } messageId) return;
+        var sender = Long(message["from"]?["id"]) ?? chat;
+        sink?.Publish(new MessageReceived(chat.ToString(), sender.ToString(), text, $"{chat}:{messageId}", time.GetUtcNow()));
     }
+
+    // The service's JSON is read without assuming its shape: a field of another type is "not there", never an exception.
+    private static long? Long(JsonNode? node) => node is JsonValue value && value.TryGetValue<long>(out var number) ? number : null;
+
+    private static bool? Flag(JsonNode? node) => node is JsonValue value && value.TryGetValue<bool>(out var flag) ? flag : null;
+
+    private static string? Text(JsonNode? node) => node is JsonValue value && value.TryGetValue<string>(out var text) ? text : null;
 
     private static async Task<JsonNode?> ReadAsync(HttpResponseMessage response, CancellationToken cancellationToken)
     {
@@ -184,7 +210,7 @@ public sealed class TelegramChannelProvider : IChannelProvider
 
     private static ChannelSendResult Map(HttpStatusCode status, JsonNode? body)
     {
-        var retryAfter = body?["parameters"]?["retry_after"]?.GetValue<int>();
+        var retryAfter = Long(body?["parameters"]?["retry_after"]);
         return status switch
         {
             HttpStatusCode.TooManyRequests => ChannelSendResult.Fail(ChannelErrorCode.RateLimited, retryAfter is { } s ? $"Telegram asked to wait {s} seconds." : "Telegram asked to slow down.", retryable: true),

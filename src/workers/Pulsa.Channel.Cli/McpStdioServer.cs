@@ -52,9 +52,13 @@ public sealed class McpStdioServer(ChannelConnector connector, TextReader input,
             }
 
             id = request["id"]?.DeepClone();
-            var method = request["method"]?.GetValue<string>();
-            if (method is null) return; // a response from the client, which this server never asks for
+            if (request["method"] is null) return; // a response from the client, which this server never asks for
             if (id is null) return; // a notification (notifications/initialized, notifications/cancelled) needs no answer
+            if (request["method"] is not JsonValue methodValue || !methodValue.TryGetValue<string>(out var method))
+            {
+                await ReplyErrorAsync(id, -32600, "method must be a string.").ConfigureAwait(false);
+                return;
+            }
 
             var result = method switch
             {
@@ -80,14 +84,19 @@ public sealed class McpStdioServer(ChannelConnector connector, TextReader input,
         {
             // shutting down
         }
+        catch (Exception)
+        {
+            // Whatever it was, the client is waiting for an answer to this id; what the exception says is not for the client.
+            if (id is not null) await ReplyErrorAsync(id, -32603, "Internal error").ConfigureAwait(false);
+        }
     }
 
     private static JsonObject Initialize(JsonObject? parameters) => new()
     {
-        ["protocolVersion"] = parameters?["protocolVersion"]?.GetValue<string>() ?? DefaultProtocolVersion,
+        ["protocolVersion"] = parameters?["protocolVersion"] is JsonValue version && version.TryGetValue<string>(out var asked) ? asked : DefaultProtocolVersion,
         ["capabilities"] = new JsonObject { ["tools"] = new JsonObject() },
         ["serverInfo"] = new JsonObject { ["name"] = ServerName, ["version"] = "0.0.1" },
-        ["instructions"] = "Send a message into one conversation, read the connection status, and read what people wrote with channel_poll (pass the last seq you saw as after). Conversations are opaque strings the service gave.",
+        ["instructions"] = "Send a message into one conversation, read the connection status, and read what people wrote with channel_poll (pass the last seq you saw as after, and the epoch it returned). Conversations are opaque strings the service gave.",
     };
 
     private static JsonArray Tools() =>
@@ -101,11 +110,12 @@ public sealed class McpStdioServer(ChannelConnector connector, TextReader input,
             },
             ["conversation", "text"],
             readOnly: false),
-        Tool("channel_status", "Read the connection's state: connecting, connected, reconnecting or stopped.", new JsonObject(), [], readOnly: true),
+        Tool("channel_status", "Read the connection's state: connecting, connected, reconnecting or stopped.", new JsonObject(), [], readOnly: true, openWorld: false),
         Tool("channel_poll", "Read the events after a sequence number (messages people wrote, connection changes), waiting up to timeoutMs for the first one. Reading does not consume events.",
             new JsonObject
             {
                 ["after"] = new JsonObject { ["type"] = "integer", ["minimum"] = 0, ["default"] = 0, ["description"] = "The seq of the last event already seen." },
+                ["epoch"] = new JsonObject { ["type"] = "string", ["description"] = "The epoch the last read returned. A different one means the connector restarted and the read starts over (reset)." },
                 ["timeoutMs"] = new JsonObject { ["type"] = "integer", ["minimum"] = 0, ["maximum"] = 30000, ["default"] = 0 },
                 ["max"] = new JsonObject { ["type"] = "integer", ["minimum"] = 1, ["maximum"] = 100, ["default"] = 20 },
             },
@@ -113,7 +123,7 @@ public sealed class McpStdioServer(ChannelConnector connector, TextReader input,
             readOnly: true),
     ];
 
-    private static JsonObject Tool(string name, string description, JsonObject properties, string[] required, bool readOnly)
+    private static JsonObject Tool(string name, string description, JsonObject properties, string[] required, bool readOnly, bool openWorld = true)
     {
         var schema = new JsonObject { ["type"] = "object", ["properties"] = properties, ["additionalProperties"] = false };
         if (required.Length > 0) schema["required"] = new JsonArray(required.Select(r => (JsonNode)r).ToArray());
@@ -127,15 +137,20 @@ public sealed class McpStdioServer(ChannelConnector connector, TextReader input,
                 ["readOnlyHint"] = readOnly,
                 ["destructiveHint"] = false,
                 ["idempotentHint"] = readOnly,
-                ["openWorldHint"] = true,
+                ["openWorldHint"] = openWorld,
             },
         };
     }
 
     private async Task<JsonObject> CallAsync(JsonObject? parameters, CancellationToken cancellationToken)
     {
-        var name = parameters?["name"]?.GetValue<string>() ?? throw new ArgumentException("name is required.");
-        var arguments = parameters["arguments"] as JsonObject ?? new JsonObject();
+        var name = parameters is null ? throw new ArgumentException("name is required.") : String(parameters, "name");
+        var arguments = parameters["arguments"] switch
+        {
+            null => new JsonObject(),
+            JsonObject given => given,
+            _ => throw new ArgumentException("arguments must be an object."),
+        };
         switch (name)
         {
             case "channel_send":
@@ -157,8 +172,8 @@ public sealed class McpStdioServer(ChannelConnector connector, TextReader input,
                     var after = Integer(arguments, "after", 0, 0, long.MaxValue);
                     var timeout = Integer(arguments, "timeoutMs", 0, 0, 30000);
                     var max = Integer(arguments, "max", 20, 1, 100);
-                    var events = await connector.PollAsync(after, (int)max, TimeSpan.FromMilliseconds(timeout), cancellationToken).ConfigureAwait(false);
-                    return Result(ChannelJson.Poll(events), isError: false);
+                    var poll = await connector.PollAsync(after, String(arguments, "epoch", required: false), (int)max, TimeSpan.FromMilliseconds(timeout), cancellationToken).ConfigureAwait(false);
+                    return Result(ChannelJson.Poll(poll), isError: false);
                 }
 
             default:

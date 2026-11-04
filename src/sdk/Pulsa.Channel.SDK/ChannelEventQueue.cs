@@ -20,6 +20,15 @@ public sealed class ChannelEventQueue : IChannelEventSink
         this.time = time ?? TimeProvider.System;
     }
 
+    /// <summary>Names this running queue. A consumer that holds a cursor from another run presents the old epoch and is told to start over.</summary>
+    public string Epoch { get; } = Guid.NewGuid().ToString("N");
+
+    /// <summary>The <see cref="ChannelEvent.Seq"/> of the oldest event still kept, 0 when there is none.</summary>
+    public long Oldest
+    {
+        get { lock (gate) { return events.Count == 0 ? 0 : events[0].Seq; } }
+    }
+
     /// <summary>The <see cref="ChannelEvent.Seq"/> of the newest event, 0 when there is none yet.</summary>
     public long Last
     {

@@ -60,10 +60,10 @@ public static class ChannelJson
         return json;
     }
 
-    public static JsonObject Poll(IReadOnlyList<ChannelEvent> events)
+    public static JsonObject Poll(ChannelPoll poll)
     {
         var array = new JsonArray();
-        foreach (var e in events) array.Add(Event(e));
-        return new JsonObject { ["events"] = array };
+        foreach (var e in poll.Events) array.Add(Event(e));
+        return new JsonObject { ["epoch"] = poll.Epoch, ["reset"] = poll.Reset, ["gap"] = poll.Gap, ["events"] = array };
     }
 }

@@ -44,11 +44,21 @@ public sealed class ChannelConnector : IAsyncDisposable
         }
     }
 
-    public Task<IReadOnlyList<ChannelEvent>> PollAsync(long after, int max, TimeSpan timeout, CancellationToken cancellationToken)
+    /// <param name="after">The <see cref="ChannelEvent.Seq"/> last seen.</param>
+    /// <param name="epoch">The <see cref="ChannelPoll.Epoch"/> of the read that gave <paramref name="after"/>, when the caller has one.</param>
+    public async Task<ChannelPoll> PollAsync(long after, string? epoch, int max, TimeSpan timeout, CancellationToken cancellationToken)
     {
         if (max is < 1 or > 100) throw new ArgumentOutOfRangeException(nameof(max), "max must be between 1 and 100.");
         if (timeout < TimeSpan.Zero || timeout > TimeSpan.FromSeconds(30)) throw new ArgumentOutOfRangeException(nameof(timeout), "timeout must be between 0 and 30 seconds.");
-        return Events.PollAsync(after, max, timeout, cancellationToken);
+        if (after < 0) throw new ArgumentOutOfRangeException(nameof(after), "after must not be negative.");
+
+        // A cursor from another run says nothing about this one: sequence numbers start again from 1 after a restart.
+        var reset = (epoch is not null && epoch != Events.Epoch) || after > Events.Last;
+        if (reset) after = 0;
+        var oldest = Events.Oldest;
+        var gap = !reset && oldest > 0 && after + 1 < oldest;
+        var events = await Events.PollAsync(after, max, timeout, cancellationToken).ConfigureAwait(false);
+        return new ChannelPoll(Events.Epoch, events, reset, gap);
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => provider.StopAsync(cancellationToken);

@@ -27,7 +27,7 @@ error message. Providers must redact it from anything they write.
 |---|---|---|
 | `channel_send` | `conversation` (opaque string), `text` (UTF-8, at most the provider's limit), optional `link` (an absolute URL appended as a link, not a body) | `{ delivered: bool, messageId?: string, error?: Error }` |
 | `channel_status` | none | `{ provider: string, state: "connecting" \| "connected" \| "reconnecting" \| "stopped", since: ISO-8601 time, detail?: string }` |
-| `channel_poll` | `after` (the `seq` last seen, default 0), `timeoutMs` (0–30000, default 0), `max` (1–100, default 20) | `{ events: Event[] }` — the events with `seq` greater than `after`, waiting up to the timeout for the first one |
+| `channel_poll` | `after` (the `seq` last seen, default 0), `epoch` (the epoch of the read that gave `after`, when the caller has one), `timeoutMs` (0–30000, default 0), `max` (1–100, default 20) | `{ epoch, reset, gap, events: Event[] }` — the events with `seq` greater than `after`, waiting up to the timeout for the first one |
 
 `channel_poll` exists because the Model Context Protocol has no standard server-to-client event for tools; a client that can
 subscribe to notifications may also be offered the same events as notifications, but the poll tool is the baseline every client
@@ -41,8 +41,17 @@ Every event has `type`, `at` (ISO-8601), and an ordering `seq` that increases by
 - `connection_changed` — `state` (as in `channel_status`), `detail?`.
 
 A read does not consume: the connector keeps the newest 1000 events, and a consumer that asks again with the last `seq` it saw
-gets what came after, so a lost reply loses nothing. Delivery is therefore at least once and a consumer de-duplicates by
-`messageId`. After a restart `seq` starts again from 1.
+gets what came after, so a lost reply loses nothing **while the same connector keeps running**. Beyond that the contract says so
+instead of failing silently:
+
+- `epoch` names the running connector. After a restart `seq` starts again from 1 and the `epoch` differs; a caller that hands its
+  old `epoch` back (or a cursor ahead of anything this run has produced) gets `reset: true` and the read starts from the beginning.
+- `gap: true` means events between the cursor and the first one returned were dropped because more than 1000 arrived unread.
+
+Delivery toward the consumer is at least once within a run, and a consumer de-duplicates by `messageId`. Toward the service it is
+at most once for a provider whose service confirms a message when it is read (Telegram does): a message the connector has read
+but the agent has not yet fetched is lost if the connector stops. Moving the service's confirmation after the consumer's cursor is
+the fix and is not built yet.
 
 ## Errors
 
@@ -69,6 +78,9 @@ connector's own tests run without an account or a network.
 | `PulsaChannel.SDK` | the contract, the fake provider, shared helpers (event queue, redaction) |
 | `PulsaChannel.Telegram` | the Telegram provider (Bot API over HTTPS, no client library) |
 | `PulsaChannel.Cli` | one executable: `serve` (the MCP server over stdin/stdout), `send`, `status`, `listen` |
+
+`status` of a real service asks whether the credential works without reading any message (a provider can offer this probe); only the
+fake provider is started for a status. Standard input is read as UTF-8 whatever the console's code page is.
 
 The provider is chosen by `PULSA_CHANNEL_PROVIDER` (`fake` or `telegram`) or `--provider`; credentials are read from the
 environment only (`PULSA_CHANNEL_TELEGRAM_TOKEN`; `PULSA_CHANNEL_TELEGRAM_API` points at another Bot API root). `send` does not

@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Net;
+using System.Net.Sockets;
 using System.Text;
 using System.Text.Json.Nodes;
 using System.Threading.Channels;
@@ -275,5 +277,193 @@ public class McpStdioServerTests
         var replies = run.Out.Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(l => (JsonObject)JsonNode.Parse(l)!).ToDictionary(r => r["id"]!.GetValue<int>());
         replies[1]["result"]!["serverInfo"]!["name"]!.GetValue<string>().Should().Be("pulsa-channel");
         replies[2]["result"]!["structuredContent"]!["events"]!.AsArray().Select(e => e!["type"]!.GetValue<string>()).Should().Contain("message_received");
+    }
+
+    [Fact]
+    public async Task Input_of_the_wrong_shape_gets_an_error_answer_and_the_session_carries_on()
+    {
+        await using var session = new Session();
+
+        session.SendRaw("""{"jsonrpc":"2.0","id":1,"method":5}""");
+        var badMethod = await session.NextAsync();
+        var badName = await session.CallAsync(2, "tools/call", new JsonObject { ["name"] = 5 });
+        var badArguments = await session.CallAsync(3, "tools/call", new JsonObject { ["name"] = "channel_status", ["arguments"] = "text" });
+        var stillAlive = await session.CallAsync(4, "ping");
+
+        badMethod["error"]!["code"]!.GetValue<int>().Should().Be(-32600);
+        badName["error"]!["code"]!.GetValue<int>().Should().Be(-32602);
+        badArguments["error"]!["code"]!.GetValue<int>().Should().Be(-32602);
+        stillAlive["result"].Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task Poll_names_its_epoch_and_a_cursor_from_another_run_starts_over()
+    {
+        await using var session = new Session();
+        session.Provider.Receive("conversation-1", "person-a", "hello");
+
+        var first = (await session.ToolAsync(1, "channel_poll"))["result"]!["structuredContent"]!;
+        var epoch = first["epoch"]!.GetValue<string>();
+        var sameRun = (await session.ToolAsync(2, "channel_poll", new JsonObject { ["after"] = 2, ["epoch"] = epoch }))["result"]!["structuredContent"]!;
+        var otherRun = (await session.ToolAsync(3, "channel_poll", new JsonObject { ["after"] = 2, ["epoch"] = "a-run-that-ended" }))["result"]!["structuredContent"]!;
+
+        first["reset"]!.GetValue<bool>().Should().BeFalse();
+        sameRun["reset"]!.GetValue<bool>().Should().BeFalse();
+        sameRun["events"]!.AsArray().Should().BeEmpty();
+        otherRun["reset"]!.GetValue<bool>().Should().BeTrue();
+        otherRun["events"]!.AsArray().Should().HaveCount(2, "a cursor from another run reads from the start instead of silently getting nothing");
+    }
+
+    [Fact]
+    public async Task Status_does_not_reach_outside_and_poll_does_because_it_returns_what_strangers_wrote()
+    {
+        await using var session = new Session();
+
+        var tools = (await session.CallAsync(1, "tools/list"))["result"]!["tools"]!.AsArray().ToDictionary(t => t!["name"]!.GetValue<string>(), t => t!["annotations"]!);
+
+        tools["channel_status"]["openWorldHint"]!.GetValue<bool>().Should().BeFalse();
+        tools["channel_poll"]["openWorldHint"]!.GetValue<bool>().Should().BeTrue();
+        tools["channel_send"]["openWorldHint"]!.GetValue<bool>().Should().BeTrue();
+    }
+
+    [Fact]
+    public void Text_on_standard_input_is_read_as_utf8_whatever_the_consoles_code_page_is()
+    {
+        var input = """{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"한글 도구","arguments":{}}}""" + "\n";
+
+        var run = RunCli("serve", input);
+
+        var reply = (JsonObject)JsonNode.Parse(run.Out.Split('\n', StringSplitOptions.RemoveEmptyEntries)[0])!;
+        reply["error"]!["message"]!.GetValue<string>().Should().Contain("한글 도구");
+    }
+
+    /// <summary>A stand-in for the Telegram Bot API on a local port: records every request address and answers the three methods the connector uses.</summary>
+    private sealed class FakeBotApi : IDisposable
+    {
+        private readonly HttpListener listener = new();
+        private readonly List<(string Path, string Body)> seen = [];
+        private int updatesServed;
+
+        public FakeBotApi()
+        {
+            var probe = new TcpListener(IPAddress.Loopback, 0);
+            probe.Start();
+            var port = ((IPEndPoint)probe.LocalEndpoint).Port;
+            probe.Stop();
+            Root = $"http://127.0.0.1:{port}/";
+            listener.Prefixes.Add(Root);
+            listener.Start();
+            _ = Task.Run(Serve);
+        }
+
+        public string Root { get; }
+
+        public IReadOnlyList<(string Path, string Body)> Seen
+        {
+            get { lock (seen) { return seen.ToList(); } }
+        }
+
+        private async Task Serve()
+        {
+            while (listener.IsListening)
+            {
+                HttpListenerContext context;
+                try { context = await listener.GetContextAsync(); }
+                catch { return; }
+                _ = Task.Run(async () =>
+                {
+                    using var reader = new StreamReader(context.Request.InputStream, Encoding.UTF8);
+                    var body = await reader.ReadToEndAsync();
+                    var path = context.Request.Url!.AbsolutePath;
+                    lock (seen) { seen.Add((path, body)); }
+                    string answer;
+                    if (path.EndsWith("/getMe")) answer = """{"ok":true,"result":{"id":1,"is_bot":true}}""";
+                    else if (path.EndsWith("/sendMessage")) answer = """{"ok":true,"result":{"message_id":9}}""";
+                    else if (path.EndsWith("/getUpdates"))
+                    {
+                        if (Interlocked.Increment(ref updatesServed) == 1) answer = """{"ok":true,"result":[{"update_id":5,"message":{"message_id":1,"from":{"id":42},"chat":{"id":555,"type":"private"},"text":"안녕하세요"}}]}""";
+                        else { await Task.Delay(200); answer = """{"ok":true,"result":[]}"""; }
+                    }
+                    else answer = """{"ok":false}""";
+                    var bytes = Encoding.UTF8.GetBytes(answer);
+                    context.Response.ContentType = "application/json";
+                    context.Response.ContentLength64 = bytes.Length;
+                    await context.Response.OutputStream.WriteAsync(bytes);
+                    context.Response.Close();
+                });
+            }
+        }
+
+        public void Dispose() => listener.Close();
+    }
+
+    private const string FakeToken = "999:never-print-this";
+
+    [Fact]
+    public void Status_of_a_real_service_asks_whether_the_credential_works_and_reads_no_messages()
+    {
+        using var api = new FakeBotApi();
+
+        var run = RunCli("status --provider telegram", null, ("PULSA_CHANNEL_TELEGRAM_TOKEN", FakeToken), ("PULSA_CHANNEL_TELEGRAM_API", api.Root));
+
+        run.Exit.Should().Be(0);
+        JsonNode.Parse(run.Out)!["state"]!.GetValue<string>().Should().Be("connected");
+        run.Out.Should().NotContain(FakeToken);
+        api.Seen.Select(r => r.Path).Should().Equal([$"/bot{FakeToken}/getMe"], "getUpdates would have confirmed messages nobody read");
+    }
+
+    [Fact]
+    public void A_one_shot_send_to_a_real_service_posts_the_message_and_reads_nothing()
+    {
+        using var api = new FakeBotApi();
+
+        var run = RunCli("send --provider telegram --conversation 555 --text 반갑습니다", null, ("PULSA_CHANNEL_TELEGRAM_TOKEN", FakeToken), ("PULSA_CHANNEL_TELEGRAM_API", api.Root));
+
+        run.Exit.Should().Be(0);
+        JsonNode.Parse(run.Out)!["messageId"]!.GetValue<string>().Should().Be("555:9");
+        var request = api.Seen.Should().ContainSingle().Which;
+        request.Path.Should().Be($"/bot{FakeToken}/sendMessage");
+        JsonNode.Parse(request.Body)!["text"]!.GetValue<string>().Should().Be("반갑습니다");
+    }
+
+    [Fact]
+    public void The_server_over_a_real_service_hands_the_agent_what_a_person_wrote_to_a_client_that_follows_the_cursor()
+    {
+        using var api = new FakeBotApi();
+        var start = new ProcessStartInfo("dotnet", $"\"{CliDll}\" serve --provider telegram") { RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true };
+        start.Environment["PULSA_CHANNEL_TELEGRAM_TOKEN"] = FakeToken;
+        start.Environment["PULSA_CHANNEL_TELEGRAM_API"] = api.Root;
+        using var process = Process.Start(start)!;
+        var transcript = new StringBuilder();
+        JsonObject Ask(int id, string method, JsonObject? parameters)
+        {
+            process.StandardInput.WriteLine(new JsonObject { ["jsonrpc"] = "2.0", ["id"] = id, ["method"] = method, ["params"] = parameters }.ToJsonString());
+            process.StandardInput.Flush();
+            var line = process.StandardOutput.ReadLine()!;
+            transcript.AppendLine(line);
+            return (JsonObject)JsonNode.Parse(line)!;
+        }
+
+        Ask(1, "initialize", new JsonObject());
+        long after = 0;
+        string? epoch = null;
+        string? text = null;
+        for (var id = 2; id < 12 && text is null; id++)
+        {
+            var arguments = new JsonObject { ["after"] = after, ["timeoutMs"] = 5000 };
+            if (epoch is not null) arguments["epoch"] = epoch;
+            var poll = Ask(id, "tools/call", new JsonObject { ["name"] = "channel_poll", ["arguments"] = arguments })["result"]!["structuredContent"]!;
+            epoch = poll["epoch"]!.GetValue<string>();
+            foreach (var e in poll["events"]!.AsArray())
+            {
+                after = e!["seq"]!.GetValue<long>();
+                if (e["type"]!.GetValue<string>() == "message_received") text = e["text"]!.GetValue<string>();
+            }
+        }
+
+        process.StandardInput.Close();
+        process.WaitForExit(30000).Should().BeTrue();
+        text.Should().Be("안녕하세요");
+        transcript.ToString().Should().NotContain(FakeToken);
     }
 }

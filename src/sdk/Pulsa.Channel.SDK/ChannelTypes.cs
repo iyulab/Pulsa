@@ -41,6 +41,13 @@ public sealed record ChannelSendResult(bool Delivered, string? MessageId = null,
     public static ChannelSendResult Fail(ChannelErrorCode code, string message, bool retryable) => new(false, null, new ChannelError(code, message, retryable));
 }
 
+/// <summary>What one read of the event stream returned, and whether the cursor it was read from still meant anything.</summary>
+/// <param name="Epoch">Names the running connector the events come from; hand it back on the next read.</param>
+/// <param name="Events">The events after the cursor, oldest first.</param>
+/// <param name="Reset">The cursor came from another run (its epoch differs, or it is ahead of anything this run has produced), so the read started from the beginning.</param>
+/// <param name="Gap">Events between the cursor and the first one returned were dropped because more than the queue's capacity arrived unread.</param>
+public sealed record ChannelPoll(string Epoch, IReadOnlyList<ChannelEvent> Events, bool Reset, bool Gap);
+
 /// <summary>Something that happened on the connection. <see cref="Seq"/> and <see cref="At"/> are set by the event queue.</summary>
 public abstract record ChannelEvent
 {
