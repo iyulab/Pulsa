@@ -466,4 +466,153 @@ public class McpStdioServerTests
         text.Should().Be("안녕하세요");
         transcript.ToString().Should().NotContain(FakeToken);
     }
+
+    private static string FreePrefix()
+    {
+        var probe = new TcpListener(IPAddress.Loopback, 0);
+        probe.Start();
+        var port = ((IPEndPoint)probe.LocalEndpoint).Port;
+        probe.Stop();
+        return $"http://127.0.0.1:{port}/";
+    }
+
+    private sealed class HttpSession : IAsyncDisposable
+    {
+        private readonly CancellationTokenSource stop = new();
+        private readonly McpHttpServer server;
+        private readonly Task running;
+
+        public HttpSession(string? key)
+        {
+            Provider = new FakeChannelProvider();
+            Connector = new ChannelConnector(Provider);
+            Connector.StartAsync(CancellationToken.None).GetAwaiter().GetResult();
+            Prefix = FreePrefix();
+            server = new McpHttpServer(new McpHandler(Connector), Prefix, key);
+            running = server.RunAsync(stop.Token);
+            Client = new HttpClient { BaseAddress = new Uri(Prefix) };
+        }
+
+        public FakeChannelProvider Provider { get; }
+
+        public ChannelConnector Connector { get; }
+
+        public string Prefix { get; }
+
+        public HttpClient Client { get; }
+
+        public Task<HttpResponseMessage> PostAsync(string json, string contentType = "application/json", Action<HttpRequestMessage>? adjust = null)
+        {
+            var request = new HttpRequestMessage(HttpMethod.Post, "mcp") { Content = new StringContent(json, Encoding.UTF8, contentType) };
+            adjust?.Invoke(request);
+            return Client.SendAsync(request, TestContext.Current.CancellationToken);
+        }
+
+        public async ValueTask DisposeAsync()
+        {
+            await stop.CancelAsync();
+            try { await running; } catch (Exception) { /* the listener stopped */ }
+            server.Dispose();
+            Client.Dispose();
+            await Connector.DisposeAsync();
+        }
+    }
+
+    [Fact]
+    public async Task Over_http_a_request_gets_the_json_reply_and_a_notification_gets_202()
+    {
+        await using var session = new HttpSession(key: null);
+
+        var listed = await session.PostAsync("""{"jsonrpc":"2.0","id":1,"method":"tools/list"}""");
+        var notified = await session.PostAsync("""{"jsonrpc":"2.0","method":"notifications/initialized"}""");
+        var sent = await session.PostAsync("""{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"channel_send","arguments":{"conversation":"conversation-1","text":"안녕하세요"}}}""");
+
+        listed.StatusCode.Should().Be(HttpStatusCode.OK);
+        listed.Content.Headers.ContentType!.MediaType.Should().Be("application/json");
+        JsonNode.Parse(await listed.Content.ReadAsStringAsync(TestContext.Current.CancellationToken))!["result"]!["tools"]!.AsArray().Should().HaveCount(3);
+        notified.StatusCode.Should().Be(HttpStatusCode.Accepted);
+        JsonNode.Parse(await sent.Content.ReadAsStringAsync(TestContext.Current.CancellationToken))!["result"]!["structuredContent"]!["delivered"]!.GetValue<bool>().Should().BeTrue();
+        session.Provider.Sent.Should().ContainSingle().Which.Text.Should().Be("안녕하세요");
+    }
+
+    [Fact]
+    public async Task Over_http_a_long_poll_waits_for_a_message_and_answers_with_it()
+    {
+        await using var session = new HttpSession(key: null);
+        var waiting = session.PostAsync("""{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"channel_poll","arguments":{"after":1,"timeoutMs":20000}}}""");
+
+        session.Provider.Receive("conversation-1", "person-a", "late message");
+        var reply = await waiting;
+
+        JsonNode.Parse(await reply.Content.ReadAsStringAsync(TestContext.Current.CancellationToken))!["result"]!["structuredContent"]!["events"]![0]!["text"]!.GetValue<string>().Should().Be("late message");
+    }
+
+    [Fact]
+    public async Task A_page_in_a_browser_cannot_drive_the_http_server()
+    {
+        await using var session = new HttpSession(key: null);
+        const string ping = """{"jsonrpc":"2.0","id":1,"method":"ping"}""";
+
+        var withOrigin = await session.PostAsync(ping, adjust: r => r.Headers.Add("Origin", "https://evil.example"));
+        var simpleForm = await session.PostAsync(ping, contentType: "text/plain");
+        var getRequest = await session.Client.GetAsync("mcp", TestContext.Current.CancellationToken);
+        var elsewhere = await session.Client.PostAsync("other", new StringContent(ping, Encoding.UTF8, "application/json"), TestContext.Current.CancellationToken);
+
+        withOrigin.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        simpleForm.StatusCode.Should().Be(HttpStatusCode.UnsupportedMediaType);
+        getRequest.StatusCode.Should().Be(HttpStatusCode.MethodNotAllowed);
+        elsewhere.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        session.Provider.Sent.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task With_a_key_set_only_a_request_carrying_that_bearer_key_is_answered()
+    {
+        await using var session = new HttpSession(key: "the-bound-key");
+        const string ping = """{"jsonrpc":"2.0","id":1,"method":"ping"}""";
+
+        var without = await session.PostAsync(ping);
+        var wrong = await session.PostAsync(ping, adjust: r => r.Headers.Add("Authorization", "Bearer another"));
+        var right = await session.PostAsync(ping, adjust: r => r.Headers.Add("Authorization", "Bearer the-bound-key"));
+
+        without.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        wrong.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        right.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task The_http_server_runs_as_its_own_process_and_takes_its_key_from_the_environment()
+    {
+        var prefix = FreePrefix();
+        var start = new ProcessStartInfo("dotnet", $"\"{CliDll}\" serve --http {prefix}") { RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true };
+        start.Environment["PULSA_CHANNEL_MCP_KEY"] = "process-key";
+        start.Environment["PULSA_CHANNEL_FAKE_INBOUND"] = "conversation-1|person-a|hello from the environment";
+        using var process = Process.Start(start)!;
+        using var client = new HttpClient { BaseAddress = new Uri(prefix) };
+        try
+        {
+            HttpResponseMessage? reply = null;
+            for (var i = 0; i < 100 && reply is null; i++)
+            {
+                try
+                {
+                    var request = new HttpRequestMessage(HttpMethod.Post, "mcp") { Content = new StringContent("""{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"channel_poll","arguments":{}}}""", Encoding.UTF8, "application/json") };
+                    request.Headers.Add("Authorization", "Bearer process-key");
+                    reply = await client.SendAsync(request, TestContext.Current.CancellationToken);
+                }
+                catch (HttpRequestException)
+                {
+                    await Task.Delay(100, TestContext.Current.CancellationToken);
+                }
+            }
+
+            reply.Should().NotBeNull("the process starts listening");
+            reply!.StatusCode.Should().Be(HttpStatusCode.OK);
+            (await reply.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)).Should().Contain("hello from the environment");
+        }
+        finally
+        {
+            process.Kill(entireProcessTree: true);
+        }
+    }
 }

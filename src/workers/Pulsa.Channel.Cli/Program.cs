@@ -39,10 +39,19 @@ switch (command)
     case "serve":
         {
             await connector.StartAsync(cancel.Token);
-            // Standard input is read as UTF-8 whatever the console's code page is (on Windows a redirected Console.In decodes by the code page).
-            using var stdin = new StreamReader(Console.OpenStandardInput(), new System.Text.UTF8Encoding(false));
-            var server = new McpStdioServer(connector, stdin, Console.Out);
-            await server.RunAsync(cancel.Token);
+            if (options.TryGetValue("http", out var address))
+            {
+                // For an enclave's connector registration (Streamable HTTP). The key, if any, is read from the environment like every credential.
+                using var http = new McpHttpServer(new McpHandler(connector), address.EndsWith('/') ? address : address + "/", Environment.GetEnvironmentVariable("PULSA_CHANNEL_MCP_KEY"));
+                await http.RunAsync(cancel.Token);
+            }
+            else
+            {
+                // Standard input is read as UTF-8 whatever the console's code page is (on Windows a redirected Console.In decodes by the code page).
+                using var stdin = new StreamReader(Console.OpenStandardInput(), new System.Text.UTF8Encoding(false));
+                await new McpStdioServer(connector, stdin, Console.Out).RunAsync(cancel.Token);
+            }
+
             await connector.StopAsync(CancellationToken.None);
             return 0;
         }
@@ -135,11 +144,11 @@ static Dictionary<string, string> ParseFlags(string[] args, out string? error)
 
 static void Usage() => Console.Error.WriteLine("""
     Usage:
-      PulsaChannel.Cli serve                                            Model Context Protocol server on stdin/stdout
+      PulsaChannel.Cli serve [--http <url>]                             Model Context Protocol server on stdin/stdout, or Streamable HTTP at <url>/mcp
       PulsaChannel.Cli send --conversation <id> --text <text> [--link <url>]
       PulsaChannel.Cli status
       PulsaChannel.Cli listen [--after <seq>] [--seconds <n>]
     Every command takes --provider fake|telegram (default: PULSA_CHANNEL_PROVIDER, else fake).
-    Credentials come from the environment: PULSA_CHANNEL_TELEGRAM_TOKEN (and PULSA_CHANNEL_TELEGRAM_API to point at another Bot API root).
+    Credentials come from the environment: PULSA_CHANNEL_MCP_KEY (the bearer key `serve --http` requires), PULSA_CHANNEL_TELEGRAM_TOKEN (and PULSA_CHANNEL_TELEGRAM_API to point at another Bot API root).
     Exit code: 0 done, 1 not delivered or not connected, 2 wrong usage.
     """);

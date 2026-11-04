@@ -79,7 +79,7 @@ connector's own tests run without an account or a network.
 |---|---|
 | `PulsaChannel.SDK` | the contract, the fake provider, shared helpers (event queue, redaction) |
 | `PulsaChannel.Telegram` | the Telegram provider (Bot API over HTTPS, no client library) |
-| `PulsaChannel.Cli` | one executable: `serve` (the MCP server over stdin/stdout), `send`, `status`, `listen` |
+| `PulsaChannel.Cli` | one executable: `serve` (the MCP server over stdin/stdout, or over HTTP with `--http <url>`), `send`, `status`, `listen` |
 
 `status` of a real service asks whether the credential works without reading any message (a provider can offer this probe); only the
 fake provider is started for a status. Standard input is read as UTF-8 whatever the console's code page is.
@@ -88,6 +88,12 @@ The provider is chosen by `PULSA_CHANNEL_PROVIDER` (`fake` or `telegram`) or `--
 environment only (`PULSA_CHANNEL_TELEGRAM_TOKEN`; `PULSA_CHANNEL_TELEGRAM_API` points at another Bot API root). `send` does not
 start the provider's connection for a real service: reading messages is what confirms them to the service, so a send that read
 would take messages nobody has seen. Exit codes: 0 done, 1 not delivered or not connected, 2 wrong usage.
+
+`serve --http <url>` is the Streamable HTTP form (`POST <url>/mcp`, one JSON-RPC message in, the JSON reply out, 202 for a
+notification) that a host registers as a connector by address. It listens only on the address given. A page in a browser must not
+be able to drive it, so a request that carries an `Origin` header (403) or is not `application/json` (415) is refused, as is any
+method but POST (405) and any other path (404); with `PULSA_CHANNEL_MCP_KEY` set, a request without that bearer key is refused
+(401) — the key is read from the environment like every credential.
 
 The MCP server implements only what a tools-only server needs (`initialize`, `ping`, `tools/list`, `tools/call`) over
 newline-delimited JSON-RPC, so it adds no dependency. A send the contract refuses is a tool result with `isError`, not a protocol
