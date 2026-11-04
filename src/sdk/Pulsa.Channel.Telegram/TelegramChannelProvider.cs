@@ -25,7 +25,6 @@ public sealed class TelegramChannelProvider : IChannelProvider, IChannelProbe, I
     private readonly List<(long UpdateId, long? Seq)> unconfirmed = [];
     private long consumedSeq;
     private long confirmedOffset;
-    private long publishedThrough = -1;
     private readonly object gate = new();
     private CancellationTokenSource? stop;
     private Task? loop;
@@ -178,10 +177,12 @@ public sealed class TelegramChannelProvider : IChannelProvider, IChannelProbe, I
                         continue;
                     }
 
-                    // Updates not yet confirmed to the service come back on every call; the ones already read are not published again.
-                    if (updateId <= publishedThrough) continue;
+                    // Updates not yet confirmed to the service come back on every call; the ones already read are not published again. They are
+                    // told apart by id, not by "lower than the newest seen": after a week without updates the service picks the next id at random.
+                    bool repeat;
+                    lock (ackGate) { repeat = unconfirmed.Exists(u => u.UpdateId == updateId); }
+                    if (repeat) continue;
                     var seq = PublishIfMessage(update);
-                    publishedThrough = updateId;
                     lock (ackGate) { unconfirmed.Add((updateId, seq)); }
                     fresh++;
                 }

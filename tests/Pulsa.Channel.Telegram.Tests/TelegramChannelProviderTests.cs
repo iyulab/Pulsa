@@ -160,6 +160,31 @@ public class TelegramChannelProviderTests
     }
 
     [Fact]
+    public async Task An_update_with_a_lower_id_than_one_already_read_is_still_new_when_the_service_has_started_numbering_again()
+    {
+        // After a week without updates the service chooses the next update id at random, so "lower than the newest seen" does not mean "seen".
+        var provider = ProviderOver(async (_, body, token) =>
+        {
+            var offset = JsonNode.Parse(body)!["offset"]!.GetValue<long>();
+            if (offset == 0) return Json(HttpStatusCode.OK, """{"ok":true,"result":[{"update_id":900,"message":{"message_id":1,"from":{"id":42},"chat":{"id":555,"type":"private"},"text":"before the quiet week"}}]}""");
+            if (offset == 901) return Json(HttpStatusCode.OK, """{"ok":true,"result":[{"update_id":7,"message":{"message_id":2,"from":{"id":42},"chat":{"id":555,"type":"private"},"text":"after the quiet week"}}]}""");
+            await Task.Delay(30, token);
+            return Json(HttpStatusCode.OK, """{"ok":true,"result":[]}""");
+        }, out var handler);
+        var events = new ChannelEventQueue();
+
+        await provider.StartAsync(events, TestContext.Current.CancellationToken);
+        (await UntilAsync(() => events.Last >= 3)).Should().BeTrue();
+        var first = (await events.PollAsync(0, 20, TimeSpan.Zero, TestContext.Current.CancellationToken)).OfType<MessageReceived>().Single();
+        provider.Acknowledge(first.Seq);
+        (await UntilAsync(() => events.Last >= 4)).Should().BeTrue("the update numbered 7 is read although 900 was read before it");
+        var texts = (await events.PollAsync(0, 20, TimeSpan.Zero, TestContext.Current.CancellationToken)).OfType<MessageReceived>().Select(m => m.Text).ToList();
+        await provider.DisposeAsync();
+
+        texts.Should().Equal("before the quiet week", "after the quiet week");
+    }
+
+    [Fact]
     public async Task A_refused_credential_stops_the_provider_and_says_so_without_the_token()
     {
         var provider = ProviderOver((_, _, _) => Task.FromResult(Json(HttpStatusCode.Unauthorized, """{"ok":false}""")), out var handler);
