@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Version>0.0.1</Version>
+    <Description>Contract and in-memory fake for a one-to-one messaging channel connector: send, status and an ordered event stream, behind one error vocabulary — host-agnostic.</Description>
+    <PackageTags>pulsa;channel;messaging;agent</PackageTags>
+  </PropertyGroup>
+
+</Project>
