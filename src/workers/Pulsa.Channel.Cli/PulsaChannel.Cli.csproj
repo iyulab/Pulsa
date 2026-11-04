@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <Version>0.0.1</Version>
+    <Description>Command line and Model Context Protocol (stdio) server for the Pulsa channel connector: send, status, listen, serve.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\sdk\Pulsa.Channel.SDK\PulsaChannel.SDK.csproj" />
+    <ProjectReference Include="..\..\sdk\Pulsa.Channel.Telegram\PulsaChannel.Telegram.csproj" />
+  </ItemGroup>
+
+</Project>

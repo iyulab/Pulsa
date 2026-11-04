@@ -67,8 +67,16 @@ connector's own tests run without an account or a network.
 | Project | Role |
 |---|---|
 | `PulsaChannel.SDK` | the contract, the fake provider, shared helpers (event queue, redaction) |
-| `PulsaChannel.Cli` | `send`, `status`, `listen` over one provider |
-| `PulsaChannel.Mcp` | the MCP server (stdio) over one provider |
-| `PulsaChannel.<Service>` | one provider per service |
+| `PulsaChannel.Telegram` | the Telegram provider (Bot API over HTTPS, no client library) |
+| `PulsaChannel.Cli` | one executable: `serve` (the MCP server over stdin/stdout), `send`, `status`, `listen` |
+
+The provider is chosen by `PULSA_CHANNEL_PROVIDER` (`fake` or `telegram`) or `--provider`; credentials are read from the
+environment only (`PULSA_CHANNEL_TELEGRAM_TOKEN`; `PULSA_CHANNEL_TELEGRAM_API` points at another Bot API root). `send` does not
+start the provider's connection for a real service: reading messages is what confirms them to the service, so a send that read
+would take messages nobody has seen. Exit codes: 0 done, 1 not delivered or not connected, 2 wrong usage.
+
+The MCP server implements only what a tools-only server needs (`initialize`, `ping`, `tools/list`, `tools/call`) over
+newline-delimited JSON-RPC, so it adds no dependency. A send the contract refuses is a tool result with `isError`, not a protocol
+error; arguments that do not fit the schema are a JSON-RPC `-32602` error.
 
 A new package starts at version `0.0.1` and is not listed in the publishing workflow until its maintainers add it.

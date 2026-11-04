@@ -5,10 +5,12 @@
   <Project Path="src/sdk/Pulsa.Transcript.SDK/PulsaTranscript.SDK.csproj" />
   <Project Path="src/sdk/Pulsa.Channel.SDK/PulsaChannel.SDK.csproj" />
   <Project Path="src/sdk/Pulsa.Channel.Telegram/PulsaChannel.Telegram.csproj" />
+  <Project Path="src/workers/Pulsa.Channel.Cli/PulsaChannel.Cli.csproj" />
   <Project Path="src/workers/Pulsa.VideoCompose.Cli/PulsaVideoCompose.Cli.csproj" />
   <Project Path="tests/Pulsa.VideoCompose.SDK.Tests/Pulsa.VideoCompose.SDK.Tests.csproj" />
   <Project Path="tests/Pulsa.Redact.SDK.Tests/Pulsa.Redact.SDK.Tests.csproj" />
   <Project Path="tests/Pulsa.Transcript.SDK.Tests/Pulsa.Transcript.SDK.Tests.csproj" />
   <Project Path="tests/Pulsa.Channel.SDK.Tests/Pulsa.Channel.SDK.Tests.csproj" />
   <Project Path="tests/Pulsa.Channel.Telegram.Tests/Pulsa.Channel.Telegram.Tests.csproj" />
+  <Project Path="tests/Pulsa.Channel.Cli.Tests/Pulsa.Channel.Cli.Tests.csproj" />
 </Solution>
