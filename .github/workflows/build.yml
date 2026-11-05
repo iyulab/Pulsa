@@ -1,13 +1,20 @@
 name: Build
 
+# Every branch is built, not only main: work in progress lives on topic branches and is merged to main
+# only as a finished unit, so the build has to be able to vouch for a branch before the merge.
 on:
   push:
-    branches: [main]
+    branches: ['**']
     paths: ['src/**', 'tests/**']
   pull_request:
     branches: [main]
     paths: ['src/**', 'tests/**']
   workflow_dispatch:
+
+# A branch that is pushed again, or that also has a pull request, builds once.
+concurrency:
+  group: build-${{ github.event.pull_request.head.ref || github.ref_name }}
+  cancel-in-progress: true
 
 jobs:
   build:

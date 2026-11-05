@@ -6,11 +6,13 @@
 
 **Reusable capabilities for AI agents and applications — the parts they need but should not build into their core.**
 
-Pulsa is a set of AI-backed capabilities, each packaged so that more than one product can use it. A capability pairs
-an AI model, which Pulsa takes as an interface (a `Microsoft.Extensions.AI` `IChatClient` the caller supplies), with the
-processing that makes it useful for one kind of work: parsing, validation, media handling, and the guarantees a model
-alone cannot give. A capability is reached across a process boundary or through a library, and the language an
-implementation is written in is not part of the contract (every package today is .NET):
+Pulsa is a set of capabilities, each packaged so that more than one product can use it. Most pair an AI model, which
+Pulsa takes as an interface (a `Microsoft.Extensions.AI` `IChatClient` the caller supplies), with the processing that
+makes it useful for one kind of work: parsing, validation, media handling, and the guarantees a model alone cannot give.
+A capability can also be the processing alone: the redaction package takes no model, because what an agent needs there
+is the processing itself, which it should not build into its core. A capability is reached across a process boundary or
+through a library, and the language an implementation is written in is not part of the contract (every package today
+is .NET):
 
 - **CLI**: a standalone executable for scripts, and for hosts that run the capability in its own process.
 - **MCP server**: the same capability as tools and events for an agent. None ships yet; it is the surface a
