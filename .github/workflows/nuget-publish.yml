@@ -90,77 +90,51 @@ jobs:
             echo "publish=false" >> $GITHUB_OUTPUT
           fi
 
-  publish-pulsa:
+  # Pack every package this push changed into one artifact, and hand it to the organization's central publisher in one call: the
+  # packages land together, so an SDK (whose nuspec carries a hard dependency on Pulsa) is never on nuget.org ahead of the Pulsa
+  # version it needs. CORRECTNESS PRECONDITION (2026-09-04): nuget.org's existing `Pulsa 0.1.0` (published 2026-03-19) is a
+  # different, older library that shares this id and version — bump src/core/Pulsa/Pulsa.csproj's <Version> before the first real
+  # publish, or the push is refused as a duplicate of a stranger.
+  pack:
     needs: detect-changes
-    if: needs.detect-changes.outputs.pulsa == 'true'
+    if: >-
+      needs.detect-changes.outputs.pulsa == 'true' || needs.detect-changes.outputs.video-compose-sdk == 'true' ||
+      needs.detect-changes.outputs.redact-sdk == 'true' || needs.detect-changes.outputs.transcript-sdk == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - uses: ./.github/actions/dotnet-restore-cache
 
-      - name: Pack
+      - name: Pack Pulsa
+        if: needs.detect-changes.outputs.pulsa == 'true'
         run: dotnet pack src/core/Pulsa/Pulsa.csproj -c Release -o nupkgs
 
-      - name: Push to NuGet
-        run: dotnet nuget push nupkgs/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
-
-  # PulsaVideoCompose.SDK's packed nuspec carries a hard `<dependency id="Pulsa">` (via its
-  # ProjectReference to src/core/Pulsa) — it must not be pushed to nuget.org ahead of a Pulsa
-  # version bump that has actually been published, or the published SDK becomes unresolvable.
-  # CORRECTNESS PRECONDITION (2026-09-04): nuget.org's existing `Pulsa 0.1.0` (published
-  # 2026-03-19) is NOT this project — it's the old FileWatcher-era Pulsa, a different library
-  # that happens to share this id+version by coincidence. `publish-pulsa`'s `--skip-duplicate`
-  # will silently no-op against it forever. Before the FIRST real publish of either package,
-  # bump src/core/Pulsa/Pulsa.csproj's <Version> (e.g. 0.1.0 -> 0.1.1) so this job actually
-  # pushes the real (AI-abstraction-conduit) Pulsa, not a duplicate-check against a stranger.
-  # needs publish-pulsa with success-or-skipped so this still runs standalone once Pulsa's own
-  # version has already been correctly published and only the SDK itself changes afterward.
-  publish-video-compose-sdk:
-    needs: [detect-changes, publish-pulsa]
-    if: always() && needs.detect-changes.outputs.video-compose-sdk == 'true' && (needs.publish-pulsa.result == 'success' || needs.publish-pulsa.result == 'skipped')
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: ./.github/actions/dotnet-restore-cache
-
-      - name: Pack
+      - name: Pack PulsaVideoCompose.SDK
+        if: needs.detect-changes.outputs.video-compose-sdk == 'true'
         run: dotnet pack src/sdk/Pulsa.VideoCompose.SDK/PulsaVideoCompose.SDK.csproj -c Release -o nupkgs
 
-      - name: Push to NuGet
-        run: dotnet nuget push nupkgs/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
-
-  # PulsaRedact.SDK carries the same hard `<dependency id="Pulsa">` (ProjectReference to
-  # src/core/Pulsa) as PulsaVideoCompose.SDK above — same precondition, same success-or-skipped
-  # dependency on publish-pulsa.
-  publish-redact-sdk:
-    needs: [detect-changes, publish-pulsa]
-    if: always() && needs.detect-changes.outputs.redact-sdk == 'true' && (needs.publish-pulsa.result == 'success' || needs.publish-pulsa.result == 'skipped')
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: ./.github/actions/dotnet-restore-cache
-
-      - name: Pack
+      - name: Pack PulsaRedact.SDK
+        if: needs.detect-changes.outputs.redact-sdk == 'true'
         run: dotnet pack src/sdk/Pulsa.Redact.SDK/PulsaRedact.SDK.csproj -c Release -o nupkgs
 
-      - name: Push to NuGet
-        run: dotnet nuget push nupkgs/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
-
-  # PulsaTranscript.SDK carries the same hard `<dependency id="Pulsa">` as the SDKs above.
-  publish-transcript-sdk:
-    needs: [detect-changes, publish-pulsa]
-    if: always() && needs.detect-changes.outputs.transcript-sdk == 'true' && (needs.publish-pulsa.result == 'success' || needs.publish-pulsa.result == 'skipped')
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: ./.github/actions/dotnet-restore-cache
-
-      - name: Pack
+      - name: Pack PulsaTranscript.SDK
+        if: needs.detect-changes.outputs.transcript-sdk == 'true'
         run: dotnet pack src/sdk/Pulsa.Transcript.SDK/PulsaTranscript.SDK.csproj -c Release -o nupkgs
 
-      - name: Push to NuGet
-        run: dotnet nuget push nupkgs/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
+      # The central publisher accepts only .nupkg / .snupkg files in this artifact.
+      - name: Upload the packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuget-packages
+          path: |
+            nupkgs/*.nupkg
+            nupkgs/*.snupkg
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    needs: pack
+    uses: iyulab/nuget-publish/.github/workflows/request.yml@de1e58c8bcefaf88f497fcb58899a1c6e84f4e29 # main
+    permissions: {}
+    secrets: inherit
