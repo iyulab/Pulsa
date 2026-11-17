@@ -245,6 +245,11 @@ public class TelegramChannelProviderTests
         for (var i = 0; i < 10 && read.OfType<MessageReceived>().Count() < 2; i++)
             read.AddRange(await events.PollAsync(read.Count == 0 ? 0 : read[^1].Seq, 20, TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken));
         var status = provider.Status.State;
+        // The offset that passes the unreadable update goes out on the loop's next request, after the consumer has read past it. The
+        // consumer is faster than the loop's pause, so wait for that request instead of racing it.
+        List<long> Offsets() => handler.Requests.Where(r => r.Path.EndsWith("/getUpdates")).Select(r => JsonNode.Parse(r.Body)!["offset"]!.GetValue<long>()).ToList();
+        for (var i = 0; i < 100 && !Offsets().Contains(21); i++)
+            await Task.Delay(20, TestContext.Current.CancellationToken);
         await provider.DisposeAsync();
 
         // The message with an unreadable update id is itself readable, so it is delivered; the one whose fields have the wrong types is not.
@@ -252,8 +257,7 @@ public class TelegramChannelProviderTests
         read.OfType<ConnectionChanged>().Select(e => e.State).Should().NotContain(ChannelState.Reconnecting);
         status.Should().Be(ChannelState.Connected);
         // The unreadable one became no event, so the cursor passes it (21) but not the good one, which the consumer has not read past (22).
-        var offsets = handler.Requests.Where(r => r.Path.EndsWith("/getUpdates")).Select(r => JsonNode.Parse(r.Body)!["offset"]!.GetValue<long>()).ToList();
-        offsets.Should().Contain(21).And.NotContain(22);
+        Offsets().Should().Contain(21).And.NotContain(22);
     }
 
     [Theory]
