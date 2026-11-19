@@ -12,9 +12,14 @@ public sealed class FakeChannelProvider : IChannelProvider
     private DateTimeOffset since;
     private ChannelSendResult? nextFailure;
     private int messages;
+    // For each message sent with choices: the ids it offered, and whether one was picked (a message takes one pick).
+    private readonly Dictionary<string, (string Conversation, HashSet<string> Ids, bool Picked)> offered = new(StringComparer.Ordinal);
+    private readonly ChannelChoiceSupport? choices;
 
-    public FakeChannelProvider(IEnumerable<string>? conversations = null, int maxTextLength = 4096, TimeProvider? time = null)
+    /// <param name="choices">What this provider takes as choices on a message; null to be a service that takes none.</param>
+    public FakeChannelProvider(IEnumerable<string>? conversations = null, int maxTextLength = 4096, TimeProvider? time = null, ChannelChoiceSupport? choices = null)
     {
+        this.choices = choices ?? new ChannelChoiceSupport(8, 64, 64);
         this.conversations = new HashSet<string>(conversations ?? ["conversation-1"], StringComparer.Ordinal);
         MaxTextLength = maxTextLength;
         this.time = time ?? TimeProvider.System;
@@ -24,6 +29,8 @@ public sealed class FakeChannelProvider : IChannelProvider
     public string Name => "fake";
 
     public int MaxTextLength { get; }
+
+    public ChannelChoiceSupport? Choices => choices;
 
     public ChannelStatus Status
     {
@@ -56,7 +63,9 @@ public sealed class FakeChannelProvider : IChannelProvider
 
             if (!conversations.Contains(request.Conversation)) return Task.FromResult(ChannelSendResult.Fail(ChannelErrorCode.UnknownConversation, "The fake provider does not know that conversation.", retryable: false));
             sent.Add(request);
-            return Task.FromResult(ChannelSendResult.Ok($"fake-{++messages}"));
+            var id = $"fake-{++messages}";
+            if (request.Choices is { Count: > 0 } offeredChoices) offered[id] = (request.Conversation, offeredChoices.Select(c => c.Id).ToHashSet(StringComparer.Ordinal), false);
+            return Task.FromResult(ChannelSendResult.Ok(id));
         }
     }
 
@@ -79,6 +88,24 @@ public sealed class FakeChannelProvider : IChannelProvider
         }
 
         sink?.Publish(new MessageReceived(conversation, sender, text, id, time.GetUtcNow()));
+    }
+
+    /// <summary>
+    /// A person picks one of the choices offered with a message the agent sent.
+    /// </summary>
+    /// <returns>True when it was taken (the event is published and the choices are closed); false when the message offered no such choice or was already picked.</returns>
+    public bool Choose(string sender, string messageId, string choiceId)
+    {
+        string conversation;
+        lock (gate)
+        {
+            if (!offered.TryGetValue(messageId, out var message) || message.Picked || !message.Ids.Contains(choiceId)) return false;
+            offered[messageId] = message with { Picked = true };
+            conversation = message.Conversation;
+        }
+
+        sink?.Publish(new ChoiceSelected(conversation, sender, messageId, choiceId, Closed: true));
+        return true;
     }
 
     /// <summary>The connection drops; sends fail with <see cref="ChannelErrorCode.NotConnected"/> until <see cref="Reconnect"/>.</summary>

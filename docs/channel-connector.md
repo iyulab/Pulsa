@@ -25,7 +25,7 @@ error message. Providers must redact it from anything they write.
 
 | Tool | Input | Result |
 |---|---|---|
-| `channel_send` | `conversation` (opaque string), `text` (UTF-8, at most the provider's limit), optional `link` (an absolute URL appended as a link, not a body) | `{ delivered: bool, messageId?: string, error?: Error }` |
+| `channel_send` | `conversation` (opaque string), `text` (UTF-8, at most the provider's limit), optional `link` (an absolute URL appended as a link, not a body), optional `choices` (see [Choices](#choices)) | `{ delivered: bool, messageId?: string, error?: Error }` |
 | `channel_status` | none | `{ provider: string, state: "connecting" \| "connected" \| "reconnecting" \| "stopped", since: ISO-8601 time, detail?: string }` |
 | `channel_poll` | `after` (the `seq` last seen, default 0), `epoch` (the epoch of the read that gave `after`, when the caller has one), `timeoutMs` (0–30000, default 0), `max` (1–100, default 20) | `{ epoch, reset, gap, events: Event[] }` — the events with `seq` greater than `after`, waiting up to the timeout for the first one |
 
@@ -38,6 +38,7 @@ can use.
 Every event has `type`, `at` (ISO-8601), and an ordering `seq` that increases by one per event of a running connector.
 
 - `message_received` — `conversation`, `sender` (opaque label), `text`, `messageId` (the service's id), `receivedAt`.
+- `choice_selected` — `conversation`, `sender` (opaque label), `messageId` (the id the send returned for the message the choice was offered with), `choiceId`, `closed` (see [Choices](#choices)).
 - `connection_changed` — `state` (as in `channel_status`), `detail?`.
 
 A read does not consume: the connector keeps the newest 1000 events, and a consumer that asks again with the last `seq` it saw
@@ -55,6 +56,21 @@ but the consumer has not yet fetched is therefore delivered again after a restar
 unconfirmed updates, which the provider reads and drops without publishing, polling about once a second while any are
 unconfirmed. A consumer that stops polling stops confirming, and the backlog stays on the service's side.
 
+## Choices
+
+A message can carry a few answers for the person to pick one from (a button row in services that have one): `choices` is a list of
+`{ id, label }`. `id` is an opaque string the consumer gets back; `label` is what the person sees. The connector never reads what a
+choice means — what picking "yes" or "no" does belongs to the host. A provider declares what its service takes (at most how many
+choices, how long an id in UTF-8 bytes, how long a label); a send outside that is `invalid_request`, and ids must differ within a message.
+A service that has no choices answers `not_supported` and sends nothing — it is never sent as plain text, because the caller may be
+waiting on the pick and decides what to do instead.
+
+When the person picks one, a `choice_selected` event follows. **A message takes one pick**: the first pick is the event; a later pick
+of the same message is told "already chosen" by the provider and is never an event. `closed` says whether the provider took the
+choices off the message so they cannot be picked again by anyone who still sees it; a provider that cannot (`closed: false`) still
+refuses a second pick, for as long as it runs. Delivery is at least once like every event, so a consumer de-duplicates by
+`messageId` — after a restart a pick the consumer never read can be delivered again.
+
 ## Errors
 
 `{ code, message, retryable }`. `code` is one of a closed set so a caller can branch without reading text:
@@ -63,6 +79,7 @@ unconfirmed. A consumer that stops polling stops confirming, and the backlog sta
 - `unknown_conversation` — the service does not know that conversation (or the bot may not write there). Not retryable.
 - `not_connected` — the connector has no live connection to the service. Retryable.
 - `rate_limited` — the service asked the connector to slow down. Retryable; `message` may say for how long.
+- `not_supported` — the service has no choices on a message and the send carried some. Not retryable; nothing was sent.
 - `service_error` — the service refused or failed for another reason. `retryable` is the provider's judgement.
 
 `message` is for a person to read, in the connector's language, and holds no credential and no message text.

@@ -25,8 +25,8 @@ public sealed class ChannelConnector : IAsyncDisposable
     public async Task<ChannelSendResult> SendAsync(ChannelSendRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
-        var invalid = Validate(request);
-        if (invalid is not null) return ChannelSendResult.Fail(ChannelErrorCode.InvalidRequest, invalid, retryable: false);
+        var refused = Validate(request);
+        if (refused is not null) return refused;
 
         try
         {
@@ -66,12 +66,32 @@ public sealed class ChannelConnector : IAsyncDisposable
 
     public ValueTask DisposeAsync() => provider.DisposeAsync();
 
-    private string? Validate(ChannelSendRequest request)
+    private ChannelSendResult? Validate(ChannelSendRequest request)
     {
-        if (string.IsNullOrWhiteSpace(request.Conversation)) return "conversation must not be empty.";
-        if (string.IsNullOrWhiteSpace(request.Text)) return "text must not be empty.";
-        if (request.Text.Length > provider.MaxTextLength) return $"text is longer than the {provider.MaxTextLength} characters this service takes in one message.";
-        if (request.Link is not null && (!request.Link.IsAbsoluteUri || request.Link.Scheme is not ("http" or "https"))) return "link must be an absolute http or https address.";
+        static ChannelSendResult Invalid(string message) => ChannelSendResult.Fail(ChannelErrorCode.InvalidRequest, message, retryable: false);
+        if (string.IsNullOrWhiteSpace(request.Conversation)) return Invalid("conversation must not be empty.");
+        if (string.IsNullOrWhiteSpace(request.Text)) return Invalid("text must not be empty.");
+        if (request.Text.Length > provider.MaxTextLength) return Invalid($"text is longer than the {provider.MaxTextLength} characters this service takes in one message.");
+        if (request.Link is not null && (!request.Link.IsAbsoluteUri || request.Link.Scheme is not ("http" or "https"))) return Invalid("link must be an absolute http or https address.");
+        return request.Choices is { Count: > 0 } choices ? ValidateChoices(choices) : null;
+    }
+
+    private ChannelSendResult? ValidateChoices(IReadOnlyList<ChannelChoice> choices)
+    {
+        static ChannelSendResult Invalid(string message) => ChannelSendResult.Fail(ChannelErrorCode.InvalidRequest, message, retryable: false);
+        // A service that has no choices does not get the message as plain text: the caller may be relying on the person's pick, and decides what to do instead.
+        if (provider.Choices is not { } support)
+            return ChannelSendResult.Fail(ChannelErrorCode.NotSupported, $"The {provider.Name} provider does not offer choices on a message.", retryable: false);
+        if (choices.Count > support.MaxChoices) return Invalid($"a message takes at most {support.MaxChoices} choices.");
+        var ids = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var choice in choices)
+        {
+            if (choice is null || string.IsNullOrWhiteSpace(choice.Id) || string.IsNullOrWhiteSpace(choice.Label)) return Invalid("every choice needs an id and a label.");
+            if (System.Text.Encoding.UTF8.GetByteCount(choice.Id) > support.MaxIdBytes) return Invalid($"a choice id is at most {support.MaxIdBytes} bytes.");
+            if (choice.Label.Length > support.MaxLabelLength) return Invalid($"a choice label is at most {support.MaxLabelLength} characters.");
+            if (!ids.Add(choice.Id)) return Invalid("choice ids must differ within one message.");
+        }
+
         return null;
     }
 }

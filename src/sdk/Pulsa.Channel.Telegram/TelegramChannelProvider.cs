@@ -7,13 +7,25 @@ namespace PulsaChannel.Telegram;
 
 /// <summary>
 /// Telegram through the Bot API: long polling for messages and <c>sendMessage</c> for replies, over the <see cref="HttpClient"/> the
-/// caller gives. Only private (one-to-one) chats are read; messages without text are skipped. The bot token is part of every request
+/// caller gives. Only private (one-to-one) chats are read; messages without text are skipped. A message sent with choices carries an
+/// inline keyboard; the first press of one of its buttons becomes a <see cref="ChoiceSelected"/> event and the keyboard is removed
+/// from the message, a later press is told it was already chosen. The bot token is part of every request
 /// address, so nothing this provider returns or throws is built from a request address.
 /// </summary>
 public sealed class TelegramChannelProvider : IChannelProvider, IChannelProbe, IChannelAcknowledge
 {
     /// <summary>The Bot API's longest message.</summary>
     public const int TelegramMaxTextLength = 4096;
+
+    /// <summary>What one message takes as choices: the Bot API limits <c>callback_data</c> to 64 bytes; the count and label length are this contract's own bounds.</summary>
+    public static readonly ChannelChoiceSupport TelegramChoices = new(MaxChoices: 8, MaxIdBytes: 64, MaxLabelLength: 64);
+
+    // Messages whose choices a person already picked in this run, so a second press (the keyboard could not be removed, or the service
+    // still showed it) is not a second pick. Bounded: the oldest are forgotten first.
+    private const int PickedMemory = 4096;
+    private readonly object choiceGate = new();
+    private readonly HashSet<string> picked = new(StringComparer.Ordinal);
+    private readonly Queue<string> pickedOrder = new();
 
     private readonly HttpClient http;
     private readonly string token;
@@ -51,6 +63,8 @@ public sealed class TelegramChannelProvider : IChannelProvider, IChannelProbe, I
 
     public int MaxTextLength => TelegramMaxTextLength;
 
+    public ChannelChoiceSupport? Choices => TelegramChoices;
+
     public ChannelStatus Status
     {
         get { lock (gate) { return new ChannelStatus(Name, state, since); } }
@@ -73,7 +87,17 @@ public sealed class TelegramChannelProvider : IChannelProvider, IChannelProbe, I
         HttpResponseMessage response;
         try
         {
-            response = await http.PostAsJsonAsync(Method("sendMessage"), new { chat_id = request.Conversation, text }, cancellationToken).ConfigureAwait(false);
+            var payload = new JsonObject { ["chat_id"] = request.Conversation, ["text"] = text };
+            if (request.Choices is { Count: > 0 } choices)
+            {
+                // One button per row: labels are free text and a row of several would be cut by the app.
+                payload["reply_markup"] = new JsonObject
+                {
+                    ["inline_keyboard"] = new JsonArray(choices.Select(c => (JsonNode)new JsonArray(new JsonObject { ["text"] = c.Label, ["callback_data"] = c.Id })).ToArray()),
+                };
+            }
+
+            response = await http.PostAsJsonAsync(Method("sendMessage"), payload, cancellationToken).ConfigureAwait(false);
         }
         catch (HttpRequestException)
         {
@@ -150,7 +174,7 @@ public sealed class TelegramChannelProvider : IChannelProvider, IChannelProbe, I
                 lock (ackGate) { offset = confirmedOffset; }
                 using var response = await http.PostAsJsonAsync(
                     Method("getUpdates"),
-                    new { offset, timeout = (int)longPoll.TotalSeconds, allowed_updates = new[] { "message" } },
+                    new { offset, timeout = (int)longPoll.TotalSeconds, allowed_updates = new[] { "message", "callback_query" } },
                     cancellationToken).ConfigureAwait(false);
                 var body = await ReadAsync(response, cancellationToken).ConfigureAwait(false);
                 if (Flag(body?["ok"]) != true || body?["result"] is not JsonArray updates)
@@ -182,7 +206,7 @@ public sealed class TelegramChannelProvider : IChannelProvider, IChannelProbe, I
                     bool repeat;
                     lock (ackGate) { repeat = unconfirmed.Exists(u => u.UpdateId == updateId); }
                     if (repeat) continue;
-                    var seq = PublishIfMessage(update);
+                    var seq = await PublishUpdateAsync(update, cancellationToken).ConfigureAwait(false);
                     lock (ackGate) { unconfirmed.Add((updateId, seq)); }
                     fresh++;
                 }
@@ -205,6 +229,86 @@ public sealed class TelegramChannelProvider : IChannelProvider, IChannelProbe, I
                 catch (OperationCanceledException) { return; }
                 backoff = TimeSpan.FromSeconds(Math.Min(backoff.TotalSeconds * 2, 30));
             }
+        }
+    }
+
+    private async Task<long?> PublishUpdateAsync(JsonNode? update, CancellationToken cancellationToken) =>
+        update?["callback_query"] is { } callback ? await HandleCallbackAsync(callback, cancellationToken).ConfigureAwait(false) : PublishIfMessage(update);
+
+    // A press on a choice button. The service keeps showing a spinner on the button until the press is answered, so every press is answered,
+    // including those that become no event.
+    private async Task<long?> HandleCallbackAsync(JsonNode callback, CancellationToken cancellationToken)
+    {
+        if (Text(callback["id"]) is not { Length: > 0 } queryId) return null;
+        var message = callback["message"];
+        if (Text(message?["chat"]?["type"]) != "private"
+            || Long(message?["chat"]?["id"]) is not { } chat
+            || Long(message?["message_id"]) is not { } messageNo
+            || Text(callback["data"]) is not { Length: > 0 } choice)
+        {
+            await AnswerAsync(queryId, null, cancellationToken).ConfigureAwait(false);
+            return null;
+        }
+
+        var messageId = $"{chat}:{messageNo}";
+        bool first;
+        lock (choiceGate)
+        {
+            first = picked.Add(messageId);
+            if (first)
+            {
+                pickedOrder.Enqueue(messageId);
+                if (pickedOrder.Count > PickedMemory) picked.Remove(pickedOrder.Dequeue());
+            }
+        }
+
+        if (!first)
+        {
+            await AnswerAsync(queryId, "Already chosen.", cancellationToken).ConfigureAwait(false);
+            return null;
+        }
+
+        var closed = await CloseChoicesAsync(chat, messageNo, cancellationToken).ConfigureAwait(false);
+        var seq = sink?.Publish(new ChoiceSelected(chat.ToString(), (Long(callback["from"]?["id"]) ?? chat).ToString(), messageId, choice, closed));
+        await AnswerAsync(queryId, null, cancellationToken).ConfigureAwait(false);
+        return seq;
+    }
+
+    // Takes the keyboard off the message so the choices cannot be picked again by anyone who still sees it. A failure is a fact the event carries, not an error.
+    private async Task<bool> CloseChoicesAsync(long chat, long messageNo, CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var response = await http.PostAsJsonAsync(
+                Method("editMessageReplyMarkup"),
+                new JsonObject { ["chat_id"] = chat, ["message_id"] = messageNo, ["reply_markup"] = new JsonObject { ["inline_keyboard"] = new JsonArray() } },
+                cancellationToken).ConfigureAwait(false);
+            return Flag((await ReadAsync(response, cancellationToken).ConfigureAwait(false))?["ok"]) == true;
+        }
+        catch (HttpRequestException)
+        {
+            return false;
+        }
+        catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return false;
+        }
+    }
+
+    private async Task AnswerAsync(string queryId, string? text, CancellationToken cancellationToken)
+    {
+        var payload = new JsonObject { ["callback_query_id"] = queryId };
+        if (text is not null) payload["text"] = text;
+        try
+        {
+            using var response = await http.PostAsJsonAsync(Method("answerCallbackQuery"), payload, cancellationToken).ConfigureAwait(false);
+        }
+        catch (HttpRequestException)
+        {
+            // The spinner stays until the app gives up; the pick itself is already recorded.
+        }
+        catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
         }
     }
 

@@ -8,6 +8,7 @@ public enum ChannelErrorCode
     NotConnected,
     RateLimited,
     ServiceError,
+    NotSupported,
 }
 
 /// <param name="Code">Why the call failed.</param>
@@ -32,7 +33,19 @@ public sealed record ChannelStatus(string Provider, ChannelState State, DateTime
 /// <param name="Conversation">The conversation to write to, as the provider named it (opaque to everything else).</param>
 /// <param name="Text">The text to send.</param>
 /// <param name="Link">An optional absolute http(s) address appended after the text.</param>
-public sealed record ChannelSendRequest(string Conversation, string Text, Uri? Link = null);
+/// <param name="Choices">Optional small set of answers offered with the message, for the person to pick one from; null or empty offers none.</param>
+public sealed record ChannelSendRequest(string Conversation, string Text, Uri? Link = null, IReadOnlyList<ChannelChoice>? Choices = null);
+
+/// <summary>One answer offered with a message. The connector never reads what a choice means.</summary>
+/// <param name="Id">An opaque identifier the consumer gets back when the person picks this choice; unique within one message.</param>
+/// <param name="Label">What the person sees on the choice.</param>
+public sealed record ChannelChoice(string Id, string Label);
+
+/// <summary>What a provider's service takes as choices on one message.</summary>
+/// <param name="MaxChoices">The most choices one message carries.</param>
+/// <param name="MaxIdBytes">The longest choice id, in UTF-8 bytes.</param>
+/// <param name="MaxLabelLength">The longest choice label, in characters.</param>
+public sealed record ChannelChoiceSupport(int MaxChoices, int MaxIdBytes, int MaxLabelLength);
 
 public sealed record ChannelSendResult(bool Delivered, string? MessageId = null, ChannelError? Error = null)
 {
@@ -73,4 +86,18 @@ public sealed record MessageReceived(string Conversation, string Sender, string 
 public sealed record ConnectionChanged(ChannelState State, string? Detail = null) : ChannelEvent
 {
     public override string Type => "connection_changed";
+}
+
+/// <summary>
+/// A person picked one of the choices offered with a message. Exactly one of these exists per message: a second pick of the same
+/// message is told "already chosen" by the provider and never reaches the consumer.
+/// </summary>
+/// <param name="Conversation">The conversation the message is in (opaque).</param>
+/// <param name="Sender">Who picked, as an opaque label.</param>
+/// <param name="MessageId">The id the send returned for the message the choice was offered with.</param>
+/// <param name="ChoiceId">The <see cref="ChannelChoice.Id"/> that was picked.</param>
+/// <param name="Closed">The provider took the choices off the message, so they cannot be picked again by anyone who still sees it.</param>
+public sealed record ChoiceSelected(string Conversation, string Sender, string MessageId, string ChoiceId, bool Closed) : ChannelEvent
+{
+    public override string Type => "choice_selected";
 }

@@ -73,12 +73,28 @@ public sealed class McpHandler(ChannelConnector connector)
 
     private static JsonArray Tools() =>
     [
-        Tool("channel_send", "Send a text message into one conversation, optionally followed by a link.",
+        Tool("channel_send", "Send a text message into one conversation, optionally followed by a link and a few choices for the person to pick one from (the pick comes back as a choice_selected event; a service that offers no choices refuses the send with not_supported).",
             new JsonObject
             {
                 ["conversation"] = new JsonObject { ["type"] = "string", ["description"] = "The conversation to write to, as an event named it." },
                 ["text"] = new JsonObject { ["type"] = "string", ["description"] = "The message text." },
                 ["link"] = new JsonObject { ["type"] = "string", ["format"] = "uri", ["description"] = "Optional absolute http(s) address added after the text." },
+                ["choices"] = new JsonObject
+                {
+                    ["type"] = "array",
+                    ["description"] = "Optional answers offered with the message. A message takes one pick: its id comes back as choiceId.",
+                    ["items"] = new JsonObject
+                    {
+                        ["type"] = "object",
+                        ["properties"] = new JsonObject
+                        {
+                            ["id"] = new JsonObject { ["type"] = "string", ["description"] = "Opaque, unique within the message." },
+                            ["label"] = new JsonObject { ["type"] = "string", ["description"] = "What the person sees." },
+                        },
+                        ["required"] = new JsonArray("id", "label"),
+                        ["additionalProperties"] = false,
+                    },
+                },
             },
             ["conversation", "text"],
             readOnly: false),
@@ -132,7 +148,7 @@ public sealed class McpHandler(ChannelConnector connector)
                     Uri? link = null;
                     if (String(arguments, "link", required: false) is { } raw && !Uri.TryCreate(raw, UriKind.Absolute, out link))
                         return Result(ChannelJson.Send(ChannelSendResult.Fail(ChannelErrorCode.InvalidRequest, "link must be an absolute http or https address.", false)), isError: true);
-                    var result = await connector.SendAsync(new ChannelSendRequest(conversation, text, link), cancellationToken).ConfigureAwait(false);
+                    var result = await connector.SendAsync(new ChannelSendRequest(conversation, text, link, Choices(arguments)), cancellationToken).ConfigureAwait(false);
                     return Result(ChannelJson.Send(result), isError: !result.Delivered);
                 }
 
@@ -151,6 +167,20 @@ public sealed class McpHandler(ChannelConnector connector)
             default:
                 throw new ArgumentException($"Unknown tool: {name}");
         }
+    }
+
+    private static List<ChannelChoice>? Choices(JsonObject arguments)
+    {
+        if (arguments["choices"] is null) return null;
+        if (arguments["choices"] is not JsonArray array) throw new ArgumentException("choices must be an array.");
+        var choices = new List<ChannelChoice>();
+        foreach (var item in array)
+        {
+            if (item is not JsonObject choice) throw new ArgumentException("every choice must be an object with an id and a label.");
+            choices.Add(new ChannelChoice(String(choice, "id"), String(choice, "label")));
+        }
+
+        return choices;
     }
 
     private static string String(JsonObject arguments, string name) => String(arguments, name, required: true)!;
