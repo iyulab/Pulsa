@@ -23,6 +23,9 @@ public sealed class TelegramChannelProvider : IChannelProvider, IChannelProbe, I
     // Messages whose choices a person already picked in this run, so a second press (the keyboard could not be removed, or the service
     // still showed it) is not a second pick. Bounded: the oldest are forgotten first.
     private const int PickedMemory = 4096;
+
+    /// <summary>What one file message takes: the Bot API's limit for a document a bot uploads, and its caption limit.</summary>
+    public static readonly ChannelFileSupport TelegramFiles = new(MaxBytes: 50L * 1024 * 1024, MaxCaptionLength: 1024);
     private readonly object choiceGate = new();
     private readonly HashSet<string> picked = new(StringComparer.Ordinal);
     private readonly Queue<string> pickedOrder = new();
@@ -65,6 +68,8 @@ public sealed class TelegramChannelProvider : IChannelProvider, IChannelProbe, I
 
     public ChannelChoiceSupport? Choices => TelegramChoices;
 
+    public ChannelFileSupport? Files => TelegramFiles;
+
     public ChannelStatus Status
     {
         get { lock (gate) { return new ChannelStatus(Name, state, since); } }
@@ -82,6 +87,7 @@ public sealed class TelegramChannelProvider : IChannelProvider, IChannelProbe, I
     public async Task<ChannelSendResult> SendAsync(ChannelSendRequest request, CancellationToken cancellationToken)
     {
         var text = request.Link is null ? request.Text : $"{request.Text}\n{request.Link.AbsoluteUri}";
+        if (request.Attachment is not null) return await SendFileAsync(request, text, cancellationToken).ConfigureAwait(false);
         if (text.Length > TelegramMaxTextLength) return ChannelSendResult.Fail(ChannelErrorCode.InvalidRequest, "text and link together are longer than one Telegram message takes.", retryable: false);
 
         HttpResponseMessage response;
@@ -90,11 +96,7 @@ public sealed class TelegramChannelProvider : IChannelProvider, IChannelProbe, I
             var payload = new JsonObject { ["chat_id"] = request.Conversation, ["text"] = text };
             if (request.Choices is { Count: > 0 } choices)
             {
-                // One button per row: labels are free text and a row of several would be cut by the app.
-                payload["reply_markup"] = new JsonObject
-                {
-                    ["inline_keyboard"] = new JsonArray(choices.Select(c => (JsonNode)new JsonArray(new JsonObject { ["text"] = c.Label, ["callback_data"] = c.Id })).ToArray()),
-                };
+                payload["reply_markup"] = Keyboard(choices);
             }
 
             response = await http.PostAsJsonAsync(Method("sendMessage"), payload, cancellationToken).ConfigureAwait(false);
@@ -119,6 +121,53 @@ public sealed class TelegramChannelProvider : IChannelProvider, IChannelProbe, I
             return Map(response.StatusCode, body);
         }
     }
+
+    // A file goes as a document (the bytes arrive as they are), with the message text as its caption. The upload is multipart; the
+    // inline keyboard, when there is one, travels as a JSON string in its own field.
+    private async Task<ChannelSendResult> SendFileAsync(ChannelSendRequest request, string caption, CancellationToken cancellationToken)
+    {
+        var attachment = request.Attachment!;
+        HttpResponseMessage response;
+        try
+        {
+            await using var stream = attachment.Open();
+            using var form = new MultipartFormDataContent
+            {
+                { new StringContent(request.Conversation), "chat_id" },
+                { new StringContent(caption), "caption" },
+            };
+            if (request.Choices is { Count: > 0 } choices) form.Add(new StringContent(Keyboard(choices).ToJsonString()), "reply_markup");
+            var file = new StreamContent(stream);
+            file.Headers.ContentType = System.Net.Http.Headers.MediaTypeHeaderValue.Parse(attachment.MediaType);
+            form.Add(file, "document", attachment.Name);
+            response = await http.PostAsync(Method("sendDocument"), form, cancellationToken).ConfigureAwait(false);
+        }
+        catch (HttpRequestException)
+        {
+            return ChannelSendResult.Fail(ChannelErrorCode.NotConnected, "Telegram could not be reached.", retryable: true);
+        }
+        catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return ChannelSendResult.Fail(ChannelErrorCode.NotConnected, "Telegram did not answer in time.", retryable: true);
+        }
+        catch (IOException)
+        {
+            return ChannelSendResult.Fail(ChannelErrorCode.InvalidRequest, "The file could not be read.", retryable: false);
+        }
+
+        using (response)
+        {
+            var body = await ReadAsync(response, cancellationToken).ConfigureAwait(false);
+            if (Flag(body?["ok"]) == true && Long(body?["result"]?["message_id"]) is { } id) return ChannelSendResult.Ok($"{request.Conversation}:{id}");
+            return Map(response.StatusCode, body);
+        }
+    }
+
+    // One button per row: labels are free text and a row of several would be cut by the app.
+    private static JsonObject Keyboard(IReadOnlyList<ChannelChoice> choices) => new()
+    {
+        ["inline_keyboard"] = new JsonArray(choices.Select(c => (JsonNode)new JsonArray(new JsonObject { ["text"] = c.Label, ["callback_data"] = c.Id })).ToArray()),
+    };
 
     /// <summary>Asks <c>getMe</c>, which reads no messages, so it confirms nothing to the service.</summary>
     public async Task<ChannelStatus> ProbeAsync(CancellationToken cancellationToken)

@@ -25,7 +25,7 @@ error message. Providers must redact it from anything they write.
 
 | Tool | Input | Result |
 |---|---|---|
-| `channel_send` | `conversation` (opaque string), `text` (UTF-8, at most the provider's limit), optional `link` (an absolute URL appended as a link, not a body), optional `choices` (see [Choices](#choices)) | `{ delivered: bool, messageId?: string, error?: Error }` |
+| `channel_send` | `conversation` (opaque string), `text` (UTF-8, at most the provider's limit), optional `link` (an absolute URL appended as a link, not a body), optional `choices` (see [Choices](#choices)), optional `file` (see [Files](#files)) | `{ delivered: bool, messageId?: string, error?: Error }` |
 | `channel_status` | none | `{ provider: string, state: "connecting" \| "connected" \| "reconnecting" \| "stopped", since: ISO-8601 time, detail?: string }` |
 | `channel_poll` | `after` (the `seq` last seen, default 0), `epoch` (the epoch of the read that gave `after`, when the caller has one), `timeoutMs` (0–30000, default 0), `max` (1–100, default 20) | `{ epoch, reset, gap, events: Event[] }` — the events with `seq` greater than `after`, waiting up to the timeout for the first one |
 
@@ -71,6 +71,17 @@ choices off the message so they cannot be picked again by anyone who still sees 
 refuses a second pick, for as long as it runs. Delivery is at least once like every event, so a consumer de-duplicates by
 `messageId` — after a restart a pick the consumer never read can be delivered again.
 
+## Files
+
+A message can carry one file: `file` is a path **under the folder the host gave the connector** (`PULSA_CHANNEL_FILE_ROOT`), and
+`text` is then the file's caption. The path comes from a model's tool call, so it stays inside what the host chose to share: an
+absolute path, one that climbs out (`..`), one that goes through a link (the file or any folder on the way), a folder, a missing
+file and an empty file are `invalid_request`, and nothing is sent. A connector given no folder sends no files (`not_supported`),
+and so does a service that takes none — a file is never dropped and the text sent alone, because the caller meant the file. A backslash is read as a path separator on every system, so a file whose own name contains one cannot be sent.
+A provider declares the largest file and the longest caption its service takes; the caption is the text with the link added, and
+its limit replaces the message's text limit for a message that carries a file. The file is sent as it is (a document), named by its
+file name, with a media type guessed from the extension. File content is never written to a log or an error.
+
 ## Errors
 
 `{ code, message, retryable }`. `code` is one of a closed set so a caller can branch without reading text:
@@ -102,7 +113,7 @@ connector's own tests run without an account or a network.
 fake provider is started for a status. Standard input is read as UTF-8 whatever the console's code page is.
 
 The provider is chosen by `PULSA_CHANNEL_PROVIDER` (`fake` or `telegram`) or `--provider`; credentials are read from the
-environment only (`PULSA_CHANNEL_TELEGRAM_TOKEN`; `PULSA_CHANNEL_TELEGRAM_API` points at another Bot API root). `send` does not
+environment only (`PULSA_CHANNEL_TELEGRAM_TOKEN`; `PULSA_CHANNEL_TELEGRAM_API` points at another Bot API root; `PULSA_CHANNEL_FILE_ROOT` is the only folder files are sent from). `send` does not
 start the provider's connection for a real service: reading messages is what confirms them to the service, so a send that read
 would take messages nobody has seen. Exit codes: 0 done, 1 not delivered or not connected, 2 wrong usage.
 

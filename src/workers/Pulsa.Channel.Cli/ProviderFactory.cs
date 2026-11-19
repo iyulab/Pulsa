@@ -12,6 +12,7 @@ public static class ProviderFactory
     public const string TelegramTokenVariable = "PULSA_CHANNEL_TELEGRAM_TOKEN";
     public const string TelegramApiVariable = "PULSA_CHANNEL_TELEGRAM_API";
     public const string FakeInboundVariable = "PULSA_CHANNEL_FAKE_INBOUND";
+    public const string FileRootVariable = "PULSA_CHANNEL_FILE_ROOT";
 
     /// <returns>
     /// The provider, the credentials that must never be written anywhere, and whether a one-shot send has to start the provider first.

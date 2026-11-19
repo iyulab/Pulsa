@@ -40,6 +40,9 @@ public interface IChannelProvider : IAsyncDisposable
     /// <summary>What the service takes as choices on a message; null when it takes none (a send that carries choices is then refused, not sent as plain text).</summary>
     ChannelChoiceSupport? Choices => null;
 
+    /// <summary>What the service takes as a file on a message; null when it takes none (a send that carries a file is then refused, not sent without it).</summary>
+    ChannelFileSupport? Files => null;
+
     /// <summary>Opens the connection and starts publishing events. Returns once the provider is running, not once it is connected.</summary>
     Task StartAsync(IChannelEventSink sink, CancellationToken cancellationToken);
 

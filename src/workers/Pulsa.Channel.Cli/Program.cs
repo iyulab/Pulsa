@@ -30,7 +30,7 @@ catch (ArgumentException e)
     return 2;
 }
 
-await using var connector = new ChannelConnector(provider, secrets);
+await using var connector = new ChannelConnector(provider, secrets, fileRoot: Environment.GetEnvironmentVariable(ProviderFactory.FileRootVariable));
 using var cancel = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) => { e.Cancel = true; cancel.Cancel(); };
 
@@ -66,7 +66,7 @@ switch (command)
 
             if (startToSend) await connector.StartAsync(cancel.Token);
             Uri? link = options.TryGetValue("link", out var rawLink) && Uri.TryCreate(rawLink, UriKind.Absolute, out var parsed) ? parsed : null;
-            var result = await connector.SendAsync(new ChannelSendRequest(conversation, text, link), cancel.Token);
+            var result = await connector.SendAsync(new ChannelSendRequest(conversation, text, link, File: options.GetValueOrDefault("file")), cancel.Token);
             Console.WriteLine(ChannelJson.Send(result).ToJsonString());
             return result.Delivered ? 0 : 1;
         }
@@ -145,10 +145,10 @@ static Dictionary<string, string> ParseFlags(string[] args, out string? error)
 static void Usage() => Console.Error.WriteLine("""
     Usage:
       PulsaChannel.Cli serve [--http <url>]                             Model Context Protocol server on stdin/stdout, or Streamable HTTP at <url>/mcp
-      PulsaChannel.Cli send --conversation <id> --text <text> [--link <url>]
+      PulsaChannel.Cli send --conversation <id> --text <text> [--link <url>] [--file <path under PULSA_CHANNEL_FILE_ROOT>]
       PulsaChannel.Cli status
       PulsaChannel.Cli listen [--after <seq>] [--seconds <n>]
     Every command takes --provider fake|telegram (default: PULSA_CHANNEL_PROVIDER, else fake).
-    Credentials come from the environment: PULSA_CHANNEL_MCP_KEY (the bearer key `serve --http` requires), PULSA_CHANNEL_TELEGRAM_TOKEN (and PULSA_CHANNEL_TELEGRAM_API to point at another Bot API root).
+    Credentials come from the environment: PULSA_CHANNEL_MCP_KEY (the bearer key `serve --http` requires), PULSA_CHANNEL_TELEGRAM_TOKEN (and PULSA_CHANNEL_TELEGRAM_API to point at another Bot API root). Files are sent only from the folder in PULSA_CHANNEL_FILE_ROOT.
     Exit code: 0 done, 1 not delivered or not connected, 2 wrong usage.
     """);

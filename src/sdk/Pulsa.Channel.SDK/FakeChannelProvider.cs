@@ -15,10 +15,13 @@ public sealed class FakeChannelProvider : IChannelProvider
     // For each message sent with choices: the ids it offered, and whether one was picked (a message takes one pick).
     private readonly Dictionary<string, (string Conversation, HashSet<string> Ids, bool Picked)> offered = new(StringComparer.Ordinal);
     private readonly ChannelChoiceSupport? choices;
+    private readonly ChannelFileSupport? files;
+    private readonly List<(string Name, string MediaType, byte[] Content)> sentFiles = [];
 
     /// <param name="choices">What this provider takes as choices on a message; null to be a service that takes none.</param>
-    public FakeChannelProvider(IEnumerable<string>? conversations = null, int maxTextLength = 4096, TimeProvider? time = null, ChannelChoiceSupport? choices = null)
+    public FakeChannelProvider(IEnumerable<string>? conversations = null, int maxTextLength = 4096, TimeProvider? time = null, ChannelChoiceSupport? choices = null, ChannelFileSupport? files = null)
     {
+        this.files = files ?? new ChannelFileSupport(10 * 1024 * 1024, 1024);
         this.choices = choices ?? new ChannelChoiceSupport(8, 64, 64);
         this.conversations = new HashSet<string>(conversations ?? ["conversation-1"], StringComparer.Ordinal);
         MaxTextLength = maxTextLength;
@@ -31,6 +34,14 @@ public sealed class FakeChannelProvider : IChannelProvider
     public int MaxTextLength { get; }
 
     public ChannelChoiceSupport? Choices => choices;
+
+    public ChannelFileSupport? Files => files;
+
+    /// <summary>The files sent through this provider (name, media type, content), oldest first.</summary>
+    public IReadOnlyList<(string Name, string MediaType, byte[] Content)> SentFiles
+    {
+        get { lock (gate) { return sentFiles.ToList(); } }
+    }
 
     public ChannelStatus Status
     {
@@ -63,6 +74,14 @@ public sealed class FakeChannelProvider : IChannelProvider
 
             if (!conversations.Contains(request.Conversation)) return Task.FromResult(ChannelSendResult.Fail(ChannelErrorCode.UnknownConversation, "The fake provider does not know that conversation.", retryable: false));
             sent.Add(request);
+            if (request.Attachment is { } attachment)
+            {
+                using var stream = attachment.Open();
+                using var copy = new MemoryStream();
+                stream.CopyTo(copy);
+                sentFiles.Add((attachment.Name, attachment.MediaType, copy.ToArray()));
+            }
+
             var id = $"fake-{++messages}";
             if (request.Choices is { Count: > 0 } offeredChoices) offered[id] = (request.Conversation, offeredChoices.Select(c => c.Id).ToHashSet(StringComparer.Ordinal), false);
             return Task.FromResult(ChannelSendResult.Ok(id));

@@ -8,9 +8,12 @@ public sealed class ChannelConnector : IAsyncDisposable
 {
     private readonly IChannelProvider provider;
     private readonly SecretRedactor redactor;
+    private readonly string? fileRoot;
 
-    public ChannelConnector(IChannelProvider provider, IEnumerable<string?>? secrets = null, ChannelEventQueue? events = null)
+    /// <param name="fileRoot">The folder files may be sent from; null when this connector sends no files. A request names a path under it, never outside it.</param>
+    public ChannelConnector(IChannelProvider provider, IEnumerable<string?>? secrets = null, ChannelEventQueue? events = null, string? fileRoot = null)
     {
+        this.fileRoot = string.IsNullOrWhiteSpace(fileRoot) ? null : Path.GetFullPath(fileRoot);
         this.provider = provider ?? throw new ArgumentNullException(nameof(provider));
         redactor = new SecretRedactor(secrets ?? []);
         Events = events ?? new ChannelEventQueue();
@@ -27,6 +30,12 @@ public sealed class ChannelConnector : IAsyncDisposable
         ArgumentNullException.ThrowIfNull(request);
         var refused = Validate(request);
         if (refused is not null) return refused;
+        if (request.File is not null)
+        {
+            var attachment = ResolveFile(request.File, out refused);
+            if (refused is not null) return refused;
+            request = request with { Attachment = attachment };
+        }
 
         try
         {
@@ -71,10 +80,105 @@ public sealed class ChannelConnector : IAsyncDisposable
         static ChannelSendResult Invalid(string message) => ChannelSendResult.Fail(ChannelErrorCode.InvalidRequest, message, retryable: false);
         if (string.IsNullOrWhiteSpace(request.Conversation)) return Invalid("conversation must not be empty.");
         if (string.IsNullOrWhiteSpace(request.Text)) return Invalid("text must not be empty.");
-        if (request.Text.Length > provider.MaxTextLength) return Invalid($"text is longer than the {provider.MaxTextLength} characters this service takes in one message.");
+        if (request.File is null && request.Text.Length > provider.MaxTextLength) return Invalid($"text is longer than the {provider.MaxTextLength} characters this service takes in one message.");
         if (request.Link is not null && (!request.Link.IsAbsoluteUri || request.Link.Scheme is not ("http" or "https"))) return Invalid("link must be an absolute http or https address.");
+        if (request.File is not null && ValidateCaption(request) is { } caption) return caption;
         return request.Choices is { Count: > 0 } choices ? ValidateChoices(choices) : null;
     }
+
+    // With a file the text is its caption, and the caption's limit is the service's (usually shorter than a message's).
+    private ChannelSendResult? ValidateCaption(ChannelSendRequest request)
+    {
+        if (provider.Files is not { } support)
+            return ChannelSendResult.Fail(ChannelErrorCode.NotSupported, $"The {provider.Name} provider does not send files.", retryable: false);
+        var caption = request.Link is null ? request.Text : $"{request.Text}\n{request.Link.AbsoluteUri}";
+        return caption.Length > support.MaxCaptionLength
+            ? ChannelSendResult.Fail(ChannelErrorCode.InvalidRequest, $"text and link together are longer than the {support.MaxCaptionLength} characters this service takes as a file's caption.", retryable: false)
+            : null;
+    }
+
+    // The file must be a regular file under the folder this connector was given. A path that is absolute, climbs out, or goes through a link
+    // is refused: the caller is a model's tool call, and what it names must stay inside what the host chose to share.
+    private ChannelAttachment? ResolveFile(string relative, out ChannelSendResult? refused)
+    {
+        static ChannelSendResult Invalid(string message) => ChannelSendResult.Fail(ChannelErrorCode.InvalidRequest, message, retryable: false);
+        refused = null;
+        if (fileRoot is null)
+        {
+            refused = ChannelSendResult.Fail(ChannelErrorCode.NotSupported, "This connector was not given a folder to send files from.", retryable: false);
+            return null;
+        }
+
+        if (string.IsNullOrWhiteSpace(relative) || Path.IsPathRooted(relative))
+        {
+            refused = Invalid("file must be a path under the folder files are sent from.");
+            return null;
+        }
+
+        var segments = relative.Split(['/', '\\'], StringSplitOptions.RemoveEmptyEntries);
+        if (segments.Length == 0 || segments.Any(s => s is "." or ".."))
+        {
+            refused = Invalid("file must be a path under the folder files are sent from.");
+            return null;
+        }
+
+        var current = fileRoot;
+        foreach (var segment in segments)
+        {
+            current = Path.Combine(current, segment);
+            FileSystemInfo entry = Directory.Exists(current) ? new DirectoryInfo(current) : new FileInfo(current);
+            if (!entry.Exists)
+            {
+                refused = Invalid("that file does not exist under the folder files are sent from.");
+                return null;
+            }
+
+            if (entry.LinkTarget is not null)
+            {
+                refused = Invalid("file must not go through a link.");
+                return null;
+            }
+        }
+
+        if (new FileInfo(current) is not { Exists: true } info)
+        {
+            refused = Invalid("file must name a file, not a folder.");
+            return null;
+        }
+
+        var support = provider.Files!;
+        if (info.Length == 0)
+        {
+            refused = Invalid("the file is empty.");
+            return null;
+        }
+
+        if (info.Length > support.MaxBytes)
+        {
+            refused = Invalid($"the file is larger than the {support.MaxBytes} bytes this service takes.");
+            return null;
+        }
+
+        var path = info.FullName;
+        return new ChannelAttachment(info.Name, MediaTypeOf(info.Extension), info.Length, () => new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read));
+    }
+
+    private static string MediaTypeOf(string extension) => extension.ToLowerInvariant() switch
+    {
+        ".txt" or ".log" => "text/plain",
+        ".md" => "text/markdown",
+        ".csv" => "text/csv",
+        ".json" => "application/json",
+        ".pdf" => "application/pdf",
+        ".png" => "image/png",
+        ".jpg" or ".jpeg" => "image/jpeg",
+        ".gif" => "image/gif",
+        ".zip" => "application/zip",
+        ".docx" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ".xlsx" => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        ".pptx" => "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        _ => "application/octet-stream",
+    };
 
     private ChannelSendResult? ValidateChoices(IReadOnlyList<ChannelChoice> choices)
     {
