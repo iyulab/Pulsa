@@ -18,3 +18,9 @@ maintainer who publishes it.
   (`IChannelProvider.Choices`); a service that has none answers the new `not_supported` error and nothing is sent. The Telegram
   provider sends an inline keyboard, answers every press, and takes the keyboard off the message after the first pick. The fake
   provider has `Choose(...)` for tests. Still not published.
+- **Channel connector: a file on a message.** `channel_send` takes an optional `file` — a path under the folder the host gave the
+  connector (`PULSA_CHANNEL_FILE_ROOT`; `send --file` on the CLI) — and the text becomes its caption. Absolute paths, paths that climb
+  out or go through a link, folders, missing and empty files are refused before anything is sent; a connector without a folder or a
+  service without files answers `not_supported`. A provider declares its file and caption limits (`IChannelProvider.Files`). The
+  Telegram provider uploads a document (`sendDocument`, multipart) with the caption, and with the choices' keyboard when there is one.
+  Still not published.

@@ -34,7 +34,24 @@ public sealed record ChannelStatus(string Provider, ChannelState State, DateTime
 /// <param name="Text">The text to send.</param>
 /// <param name="Link">An optional absolute http(s) address appended after the text.</param>
 /// <param name="Choices">Optional small set of answers offered with the message, for the person to pick one from; null or empty offers none.</param>
-public sealed record ChannelSendRequest(string Conversation, string Text, Uri? Link = null, IReadOnlyList<ChannelChoice>? Choices = null);
+/// <param name="File">Optional file to send with the message, as a path under the folder the connector was given (never an absolute path); <paramref name="Text"/> is then its caption.</param>
+public sealed record ChannelSendRequest(string Conversation, string Text, Uri? Link = null, IReadOnlyList<ChannelChoice>? Choices = null, string? File = null)
+{
+    /// <summary>Set by the connector after it checked <see cref="File"/>; a provider reads the file from here, never from <see cref="File"/>.</summary>
+    public ChannelAttachment? Attachment { get; init; }
+}
+
+/// <summary>A file the connector checked and opened for a provider to send.</summary>
+/// <param name="Name">The file's name without a folder.</param>
+/// <param name="MediaType">The media type guessed from the extension (<c>application/octet-stream</c> when unknown).</param>
+/// <param name="Length">The size in bytes.</param>
+/// <param name="Open">Opens the file for reading; the caller disposes the stream.</param>
+public sealed record ChannelAttachment(string Name, string MediaType, long Length, Func<Stream> Open);
+
+/// <summary>What a provider's service takes as a file on one message.</summary>
+/// <param name="MaxBytes">The largest file in bytes.</param>
+/// <param name="MaxCaptionLength">The longest caption (the message text, with the link added) in characters.</param>
+public sealed record ChannelFileSupport(long MaxBytes, int MaxCaptionLength);
 
 /// <summary>One answer offered with a message. The connector never reads what a choice means.</summary>
 /// <param name="Id">An opaque identifier the consumer gets back when the person picks this choice; unique within one message.</param>

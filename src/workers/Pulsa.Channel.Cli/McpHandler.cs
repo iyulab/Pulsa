@@ -73,12 +73,13 @@ public sealed class McpHandler(ChannelConnector connector)
 
     private static JsonArray Tools() =>
     [
-        Tool("channel_send", "Send a text message into one conversation, optionally followed by a link and a few choices for the person to pick one from (the pick comes back as a choice_selected event; a service that offers no choices refuses the send with not_supported).",
+        Tool("channel_send", "Send a text message into one conversation, optionally with a file (the text is its caption), a link and a few choices for the person to pick one from (the pick comes back as a choice_selected event; a service that offers no choices refuses the send with not_supported).",
             new JsonObject
             {
                 ["conversation"] = new JsonObject { ["type"] = "string", ["description"] = "The conversation to write to, as an event named it." },
                 ["text"] = new JsonObject { ["type"] = "string", ["description"] = "The message text." },
                 ["link"] = new JsonObject { ["type"] = "string", ["format"] = "uri", ["description"] = "Optional absolute http(s) address added after the text." },
+                ["file"] = new JsonObject { ["type"] = "string", ["description"] = "Optional file to send with the message: a path under the folder this connector was given (not an absolute path). The text is then the file's caption." },
                 ["choices"] = new JsonObject
                 {
                     ["type"] = "array",
@@ -148,7 +149,7 @@ public sealed class McpHandler(ChannelConnector connector)
                     Uri? link = null;
                     if (String(arguments, "link", required: false) is { } raw && !Uri.TryCreate(raw, UriKind.Absolute, out link))
                         return Result(ChannelJson.Send(ChannelSendResult.Fail(ChannelErrorCode.InvalidRequest, "link must be an absolute http or https address.", false)), isError: true);
-                    var result = await connector.SendAsync(new ChannelSendRequest(conversation, text, link, Choices(arguments)), cancellationToken).ConfigureAwait(false);
+                    var result = await connector.SendAsync(new ChannelSendRequest(conversation, text, link, Choices(arguments), String(arguments, "file", required: false)), cancellationToken).ConfigureAwait(false);
                     return Result(ChannelJson.Send(result), isError: !result.Delivered);
                 }
 
