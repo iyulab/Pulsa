@@ -11,6 +11,7 @@ public static class ChannelJson
         ChannelErrorCode.UnknownConversation => "unknown_conversation",
         ChannelErrorCode.NotConnected => "not_connected",
         ChannelErrorCode.RateLimited => "rate_limited",
+        ChannelErrorCode.NotSupported => "not_supported",
         _ => "service_error",
     };
 
@@ -50,6 +51,13 @@ public static class ChannelJson
                 json["text"] = m.Text;
                 json["messageId"] = m.MessageId;
                 json["receivedAt"] = m.ReceivedAt.ToString("O");
+                break;
+            case ChoiceSelected s:
+                json["conversation"] = s.Conversation;
+                json["sender"] = s.Sender;
+                json["messageId"] = s.MessageId;
+                json["choiceId"] = s.ChoiceId;
+                json["closed"] = s.Closed;
                 break;
             case ConnectionChanged c:
                 json["state"] = State(c.State);
