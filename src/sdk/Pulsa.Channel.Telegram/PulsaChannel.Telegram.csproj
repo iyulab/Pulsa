@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Version>0.0.1</Version>
+    <Description>Telegram provider for the Pulsa channel connector: one-to-one chats through the Bot API over plain HTTPS, no client library.</Description>
+    <PackageTags>pulsa;channel;telegram;bot</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Pulsa.Channel.SDK\PulsaChannel.SDK.csproj" />
+  </ItemGroup>
+
+</Project>
