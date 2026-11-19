@@ -77,7 +77,7 @@ A message can carry one file: `file` is a path **under the folder the host gave 
 `text` is then the file's caption. The path comes from a model's tool call, so it stays inside what the host chose to share: an
 absolute path, one that climbs out (`..`), one that goes through a link (the file or any folder on the way), a folder, a missing
 file and an empty file are `invalid_request`, and nothing is sent. A connector given no folder sends no files (`not_supported`),
-and so does a service that takes none — a file is never dropped and the text sent alone, because the caller meant the file.
+and so does a service that takes none — a file is never dropped and the text sent alone, because the caller meant the file. A backslash is read as a path separator on every system, so a file whose own name contains one cannot be sent.
 A provider declares the largest file and the longest caption its service takes; the caption is the text with the link added, and
 its limit replaces the message's text limit for a message that carries a file. The file is sent as it is (a document), named by its
 file name, with a media type guessed from the extension. File content is never written to a log or an error.

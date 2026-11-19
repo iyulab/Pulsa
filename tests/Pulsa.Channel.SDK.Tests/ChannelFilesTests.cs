@@ -80,6 +80,17 @@ public sealed class ChannelFilesTests : IDisposable
     }
 
     [Fact]
+    public async Task A_backslash_separates_path_segments_on_every_system_so_a_file_under_the_folder_is_reached_by_either_separator()
+    {
+        var (connector, provider) = await StartedAsync(root);
+
+        var result = await connector.SendAsync(new ChannelSendRequest("conversation-1", "The Q3 numbers", File: "reports\\q3.csv"), TestContext.Current.CancellationToken);
+
+        result.Delivered.Should().BeTrue();
+        provider.SentFiles.Should().ContainSingle().Which.Name.Should().Be("q3.csv");
+    }
+
+    [Fact]
     public async Task A_link_to_a_file_outside_the_folder_is_refused_whether_the_file_or_a_folder_on_the_way_is_the_link()
     {
         try
