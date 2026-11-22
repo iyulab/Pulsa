@@ -87,5 +87,7 @@ terms, is decided before the first implementation.
 ## Open questions
 
 - The shape of the voice-activity and diarizer ports, and whether a model supply layer already offers them.
+- A recognizer that also returns speakers: whether it fills the diarize stage itself, or diarization stays a separate
+  call so speaker labels hold across segments.
 - Whether recognition is called once per segment or once per file with segments mapped afterwards, when the
   recognizer returns its own times.
