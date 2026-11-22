@@ -4,7 +4,7 @@ using NSubstitute;
 using PulsaVideoCompose;
 using Xunit;
 
-namespace Pulsa.VideoCompose.SDK.Tests;
+namespace Pulsa.Tests.VideoCompose;
 
 public class CaptionDrafterTests
 {

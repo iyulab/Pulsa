@@ -7,6 +7,7 @@
   <Project Path="src/sdk/Pulsa.Channel.Telegram/PulsaChannel.Telegram.csproj" />
   <Project Path="src/workers/Pulsa.Channel.Cli/PulsaChannel.Cli.csproj" />
   <Project Path="src/workers/Pulsa.VideoCompose.Cli/PulsaVideoCompose.Cli.csproj" />
+  <Project Path="tests/Pulsa.Tests/Pulsa.Tests.csproj" />
   <Project Path="tests/Pulsa.VideoCompose.SDK.Tests/Pulsa.VideoCompose.SDK.Tests.csproj" />
   <Project Path="tests/Pulsa.Redact.SDK.Tests/Pulsa.Redact.SDK.Tests.csproj" />
   <Project Path="tests/Pulsa.Transcript.SDK.Tests/Pulsa.Transcript.SDK.Tests.csproj" />
