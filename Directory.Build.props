@@ -21,12 +21,4 @@
   <ItemGroup Condition="Exists('$(MSBuildProjectDirectory)\README.md')">
     <None Include="$(MSBuildProjectDirectory)\README.md" Pack="true" PackagePath="\" Visible="false" />
   </ItemGroup>
-
-  <!-- Local NuGet package source for development -->
-  <PropertyGroup Condition="Exists('D:\local-nuget-packages')">
-    <RestoreAdditionalProjectSources>
-      $(RestoreAdditionalProjectSources);D:\local-nuget-packages
-    </RestoreAdditionalProjectSources>
-  </PropertyGroup>
-
 </Project>
