@@ -15,17 +15,24 @@ one kind of work: parsing, validation, media handling, and the guarantees a mode
 also be the processing alone: the redaction package takes no model, because what an agent needs there is the
 processing itself, which it should not build into its core.
 
-A capability is defined by its contract, not by a programming language. It is reached across a process boundary or
-through a library:
+A capability is defined by its contract, not by a programming language or by one way of calling it. What it has to do
+is perform the part a consuming application needs, reliably. It reaches that application in whichever way suits it;
+a capability offers the ways its consumers need, not necessarily all of them:
 
-- **CLI**: a standalone executable for scripts, and for hosts that run the capability in its own process.
-- **MCP server**: the same capability as tools and events for an agent. The channel connector has one (not yet
-  published); it is the surface a language-neutral Pulsa is built around.
-- **SDK**: a per-language library binding with a request/result API.
+- **Library**: a per-language binding with a request/result API, called inside the consuming process.
+- **CLI**: a standalone executable, called from another process or another language, and the way to keep a heavy or
+  differently licensed dependency outside the host.
+- **File system, asynchronously**: work handed over through folders and picked up later, for long jobs and for a
+  capability that lives and fails apart from the application. The first capability that uses this way defines its
+  contract.
+- **MCP server**: the capability as tools and events for an agent. The channel connector has one (not yet published).
 
-Every implementation and binding today is .NET, published to NuGet. That is a current fact, not a rule: a capability
-can be written in another language, and its builds, versions and publishing then follow that language's own
-conventions.
+The implementation is written in the language that fits the problem. Every implementation and binding today is .NET,
+published to NuGet; that is a current fact, not a rule. A capability in another language builds, versions and
+publishes by that language's own conventions.
+
+Reliability is what makes a capability worth taking: invariants are kept by the implementation, a result that cannot
+keep them is refused with the reason, failures and retries are part of the contract, and each invariant has a test.
 
 A Pulsa package is not an AI product on its own. It is a component: something a product assembles into its own
 workflow.
@@ -183,13 +190,13 @@ File.WriteAllText("meeting.clean.vtt", WebVtt.Write(result.Cues));
 - **Code holds the invariants.** Model output is parsed and validated deterministically — counts, timings,
   and structure are guaranteed by the implementation, not requested in a prompt, and the contract states them.
 - **Host-agnostic.** No package knows about the application using it. A host written in any language takes a
-  capability the same way: through its CLI or MCP server, or through a binding in its own language.
+  capability the same way, through whichever of its library, CLI, file-system or MCP ways it uses.
 - **The contract sets the shape.** Each capability's contract — tools, events, inputs, results, invariants, errors —
-  is written down without reference to a language, in `docs/`. SDKs, CLIs and MCP servers follow it, so they never
-  drift apart. The channel connector's contract is the first one written; for the other capabilities the SDK's
+  is written down without reference to a language, in `docs/`. Every way of reaching the capability follows it, so
+  they never drift apart. The channel connector's contract is the first one written; for the other capabilities the SDK's
   request/result API still stands in for it.
-- **The language fits the capability.** An implementation is written in the language whose ecosystem best serves
-  what it depends on. The repository as a whole is not tied to one language.
+- **The language fits the problem.** An implementation is written in the language that best fits what it has to
+  do. The repository as a whole is not tied to one language.
 
 ## Repository layout
 

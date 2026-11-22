@@ -7,9 +7,10 @@ maintainer who publishes it.
 
 - **README: what Pulsa is, stated without tying it to .NET.** Pulsa is described as parts for building AI agents and AI
   services: self-contained capabilities behind a contract of tools and events, with the model, configuration,
-  credentials and host policies left to the product that uses them. The design principles no longer assume a .NET host:
-  a capability's language-neutral contract sets its shape, and each implementation is written in the language that best
-  fits what it depends on. The package table and repository layout now list the channel connector packages (not yet
+  credentials and host policies left to the product that uses them. A capability reaches its consumer as a library, a
+  CLI, asynchronously through the file system, or as an MCP server — whichever its consumers need — and reliability is
+  stated as what it must deliver. The design principles no longer assume a .NET host: a capability's language-neutral
+  contract sets its shape, and each implementation is written in the language that fits the problem. The package table and repository layout now list the channel connector packages (not yet
   published). No package changes.
 - **Channel connector (design, new packages — not yet published).** A one-to-one messaging channel behind one contract:
   `PulsaChannel.SDK` (contract, in-memory fake provider, ordered event queue with a read cursor, credential redaction) and
