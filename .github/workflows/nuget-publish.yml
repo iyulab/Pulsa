@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'src/core/Pulsa/Pulsa.csproj'
+      - 'src/sdk/Pulsa.Media/PulsaMedia.csproj'
   workflow_dispatch:
 
 jobs:
@@ -12,6 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       pulsa: ${{ steps.pulsa.outputs.publish }}
+      media: ${{ steps.media.outputs.publish }}
     steps:
       # The whole history: a push can carry several commits, and a version change in any of them
       # counts. Reading only the last commit (HEAD~1..HEAD) missed a version bump that was not the
@@ -45,6 +47,22 @@ jobs:
             echo "publish=false" >> $GITHUB_OUTPUT
           fi
 
+      - name: Check PulsaMedia
+        id: media
+        shell: bash
+        run: |
+          csproj="src/sdk/Pulsa.Media/PulsaMedia.csproj"
+          version=$(sed -n 's/.*<Version>\([^<]*\)<.*/\1/p' "$csproj")
+          # 0.0.0 is the floor the version line starts at before its first release; it is never published.
+          if [ "$version" == "0.0.0" ]; then
+            echo "publish=false" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event_name }}" == "workflow_dispatch" ] || grep -qxF "$csproj" "$RUNNER_TEMP/changed.txt"; then
+            echo "publish=true" >> $GITHUB_OUTPUT
+            echo "version=${version}" >> $GITHUB_OUTPUT
+          else
+            echo "publish=false" >> $GITHUB_OUTPUT
+          fi
+
   # Pack every package this push changed into one artifact, and hand it to the organization's central publisher in one call: the
   # packages land together, so a package whose nuspec depends on Pulsa is never on nuget.org ahead of the Pulsa
   # version it needs. CORRECTNESS PRECONDITION (2026-09-04): nuget.org's existing `Pulsa 0.1.0` (published 2026-03-19) is a
@@ -52,7 +70,7 @@ jobs:
   # publish, or the push is refused as a duplicate of a stranger.
   pack:
     needs: detect-changes
-    if: needs.detect-changes.outputs.pulsa == 'true'
+    if: needs.detect-changes.outputs.pulsa == 'true' || needs.detect-changes.outputs.media == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -62,6 +80,10 @@ jobs:
       - name: Pack Pulsa
         if: needs.detect-changes.outputs.pulsa == 'true'
         run: dotnet pack src/core/Pulsa/Pulsa.csproj -c Release -o nupkgs
+
+      - name: Pack PulsaMedia
+        if: needs.detect-changes.outputs.media == 'true'
+        run: dotnet pack src/sdk/Pulsa.Media/PulsaMedia.csproj -c Release -o nupkgs
 
       # The central publisher accepts only .nupkg / .snupkg files in this artifact.
       - name: Upload the packages

@@ -5,6 +5,8 @@ maintainer who publishes it.
 
 ## Unreleased
 
+- **Publishing: `PulsaMedia` is published like `Pulsa`.** A push to `main` that changes its version line packs it into the
+  same call to the publisher as `Pulsa`; the starting version 0.0.0 is never published. No package changes.
 - **Breaking — packages are cut by the dependency they bring.** A consumer decides whether to take on a dependency
   (ffmpeg, a service, a library), so capabilities that share one now share a package. Namespaces and types are unchanged;
   only package references move:
