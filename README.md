@@ -4,20 +4,36 @@
 [![NuGet Publish](https://github.com/iyulab/Pulsa/actions/workflows/nuget-publish.yml/badge.svg)](https://github.com/iyulab/Pulsa/actions/workflows/nuget-publish.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**Reusable capabilities for AI agents and applications — the parts they need but should not build into their core.**
+**Parts for building AI agents and AI services — each one a self-contained capability that a product needs but should
+not build into its own core.**
 
-Pulsa is a set of capabilities, each packaged so that more than one product can use it. Most pair an AI model, which
-Pulsa takes as an interface (a `Microsoft.Extensions.AI` `IChatClient` the caller supplies), with the processing that
-makes it useful for one kind of work: parsing, validation, media handling, and the guarantees a model alone cannot give.
-A capability can also be the processing alone: the redaction package takes no model, because what an agent needs there
-is the processing itself, which it should not build into its core. A capability is reached across a process boundary or
-through a library, and the language an implementation is written in is not part of the contract (every package today
-is .NET):
+Pulsa is a set of components *for* AI: what uses them is an agent or an AI service. Each capability is split off on its
+own and put behind a contract. It carries its own dependencies, is tested and versioned on its own,
+and can run in its own process. The model, the configuration, the credentials and the host's policies stay with the
+product that uses it. Most capabilities pair a model the caller supplies with the processing that makes it useful for
+one kind of work: parsing, validation, media handling, and the guarantees a model alone cannot give. Every capability
+has a role for a model. Either the model is required, or the capability runs deterministically without one and does
+more when it is handed one. Redaction, for example, hides the region it is told today; given a vision model it is to
+find what to hide.
 
-- **CLI**: a standalone executable for scripts, and for hosts that run the capability in its own process.
-- **MCP server**: the same capability as tools and events for an agent. None ships yet; it is the surface a
-  language-neutral Pulsa is built around.
-- **SDK**: a per-language library binding with a request/result API. Every package today ships a NuGet SDK.
+A capability is defined by its contract, not by a programming language or by one way of calling it. What it has to do
+is perform the part a consuming application needs, reliably. It reaches that application in whichever way suits it;
+a capability offers the ways its consumers need, not necessarily all of them:
+
+- **Library**: a per-language binding with a request/result API, called inside the consuming process.
+- **CLI**: a standalone executable, called from another process or another language, and the way to keep a heavy or
+  differently licensed dependency outside the host.
+- **File system, asynchronously**: work handed over through folders and picked up later, for long jobs and for a
+  capability that lives and fails apart from the application. The first capability that uses this way defines its
+  contract.
+- **MCP server**: the capability as tools and events for an agent. The channel connector has one (not yet published).
+
+The implementation is written in the language that fits the problem. Every implementation and binding today is .NET,
+published to NuGet; that is a current fact, not a rule. A capability in another language builds, versions and
+publishes by that language's own conventions.
+
+Reliability is what makes a capability worth taking: invariants are kept by the implementation, a result that cannot
+keep them is refused with the reason, failures and retries are part of the contract, and each invariant has a test.
 
 A Pulsa package is not an AI product on its own. It is a component: something a product assembles into its own
 workflow.
@@ -31,9 +47,13 @@ core. A capability belongs here when:
   product could need the same thing.
 - **It is a dependency boundary or needs its own process.** It brings dependencies (a native tool such as ffmpeg, a
   model format, a heavy library) that a host should take on only when it uses the capability, or a licence or a
-  native runtime means it should run beside the host, not inside it. That is what the CLI and MCP surfaces are for.
-- **It reaches an agent as tools or events.** Only a capability an agent can be handed, as tools it calls or events
-  it reacts to, is admitted.
+  native runtime means it should run beside the host, not inside it. That is what the CLI, file-system and MCP ways
+  are for.
+- **It can be handed over as a contract.** Its inputs, results and invariants can be written down without reference
+  to a language, and an agent could use that contract as a tool. It does not have to ship an MCP server: a capability
+  offers the ways its consumers need.
+- **It has a role for a model.** Handed an LLM, a vision model or another model handler, the capability can do more
+  than it does without one. A capability with nothing for a model to do, however useful, is not admitted.
 
 A single prompt or a single call is not a capability and stays in the application. A capability whose value comes
 from one application's domain stays in that application's own plugin. Who accepts a new capability, and on what
@@ -43,27 +63,32 @@ evidence, is in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 | Package | Description | Surfaces | NuGet |
 |---|---|---|---|
-| `Pulsa` | Shared base layer; carries `Microsoft.Extensions.AI.Abstractions` for every SDK | — | [![NuGet](https://img.shields.io/nuget/v/Pulsa.svg)](https://www.nuget.org/packages/Pulsa) |
-| `PulsaVideoCompose.SDK` | Compose images and captions into a captioned, Ken Burns–animated video (ffmpeg), with optional AI caption drafting | SDK · CLI | [![NuGet](https://img.shields.io/nuget/v/PulsaVideoCompose.SDK.svg)](https://www.nuget.org/packages/PulsaVideoCompose.SDK) |
-| `PulsaRedact.SDK` | Pixelate a rectangular region of an image or a time range of a video (ffmpeg) | SDK | [![NuGet](https://img.shields.io/nuget/v/PulsaRedact.SDK.svg)](https://www.nuget.org/packages/PulsaRedact.SDK) |
-| `PulsaTranscript.SDK` | Refine a speech-to-text transcript (WebVTT) with a chat model, behind a sound-alike acceptance gate | SDK | [![NuGet](https://img.shields.io/nuget/v/PulsaTranscript.SDK.svg)](https://www.nuget.org/packages/PulsaTranscript.SDK) |
+| `Pulsa` | Capabilities that bring no dependency beyond the chat model you supply: refine a speech-to-text transcript (WebVTT) behind a sound-alike acceptance gate, and draft on-screen captions | SDK | [![NuGet](https://img.shields.io/nuget/v/Pulsa.svg)](https://www.nuget.org/packages/Pulsa) |
+| `PulsaMedia` | Capabilities that need ffmpeg: compose images and captions into a captioned, Ken Burns–animated video, and pixelate a region of an image or a time range of a video | SDK | not yet published |
+| `PulsaMedia.Cli` | `PulsaMedia` as an executable: `compose`, `draft-captions`, `redact` | CLI | not yet published |
+| `PulsaChannel.SDK` | One-to-one messaging channel contract, in-memory fake provider, ordered event queue ([contract](docs/channel-connector.md)) | SDK | not yet published |
+| `PulsaChannel.Telegram` | Telegram provider for the channel contract (Bot API over HTTPS) | SDK | not yet published |
+| `PulsaChannel.Cli` | The channel connector as an executable: an MCP server (`serve`) and `send` · `status` · `listen` | MCP · CLI | not yet published |
 
-All packages target .NET 10. Pulsa is pre-1.0: minor versions may change the public surface.
+A package holds the capabilities that share its dependencies (see the design principles). `PulsaVideoCompose.SDK`,
+`PulsaRedact.SDK` and `PulsaTranscript.SDK` are retired: their capabilities are now in `PulsaMedia` and `Pulsa` — see
+the [changelog](CHANGELOG.md).
+
+The .NET packages target .NET 10. Pulsa is pre-1.0: minor versions may change the public surface.
 
 ## Installation
 
 ```bash
-dotnet add package PulsaVideoCompose.SDK
-dotnet add package PulsaRedact.SDK
-dotnet add package PulsaTranscript.SDK
+dotnet add package Pulsa        # transcript refinement, caption drafting
+dotnet add package PulsaMedia   # video composition, redaction (ffmpeg)
 ```
 
-The video and redaction SDKs drive [ffmpeg](https://ffmpeg.org/); pass the folder that contains the
-`ffmpeg` binary to their constructors. `PulsaTranscript.SDK` has no native dependency.
+`PulsaMedia` drives [ffmpeg](https://ffmpeg.org/); pass the folder that contains the `ffmpeg` binary to its
+constructors. `Pulsa` has no native dependency.
 
 ## Usage
 
-### Video composition — `PulsaVideoCompose.SDK`
+### Video composition — `PulsaMedia`
 
 ```csharp
 using PulsaVideoCompose;
@@ -105,17 +130,17 @@ foreach (var s in result.FontSubstitutions ?? [])   // null: the check could not
     Console.WriteLine($"{s.RequestedFamily} was not found; drawn in {s.UsedFont}");
 ```
 
-Captions can be drafted from a short description with any `IChatClient`:
+Captions can be drafted from a short description with any `IChatClient` (`CaptionDrafter`, in `Pulsa`):
 
 ```csharp
 var captions = await CaptionDrafter.DraftAsync(chatClient,
     new DraftCaptionsRequest(["scene1.png", "scene2.png", "scene3.png"], "A product demo video."));
 ```
 
-A command-line front end is included (`PulsaVideoCompose.Cli`):
+A command-line front end is included (`PulsaMedia.Cli`, which also has `draft-captions` and `redact`):
 
 ```bash
-PulsaVideoCompose.Cli compose \
+PulsaMedia.Cli compose \
   --images scene1.png scene2.png scene3.png \
   --captions "First caption" "Second caption" "Third caption" \
   --scene-duration 4 \
@@ -127,7 +152,7 @@ PulsaVideoCompose.Cli compose \
   --font "Noto Sans KR" --fonts-dir ./fonts
 ```
 
-### Redaction — `PulsaRedact.SDK`
+### Redaction — `PulsaMedia`
 
 ```csharp
 using PulsaRedact;
@@ -140,7 +165,7 @@ var result = await redactor.RedactAsync(new RedactRequest(
     StartTime: 5, EndTime: 12));             // seconds; video only — omit for the whole video or an image
 ```
 
-### Transcript refinement — `PulsaTranscript.SDK`
+### Transcript refinement — `Pulsa`
 
 ```csharp
 using PulsaTranscript;
@@ -165,30 +190,40 @@ File.WriteAllText("meeting.clean.vtt", WebVtt.Write(result.Cues));
 
 ## Design principles
 
-- **One feature per package.** Each package does one job and can be adopted on its own, with only the
-  dependencies that job needs.
-- **The caller owns the model.** AI steps take an injected `IChatClient`; no package creates clients,
-  reads configuration, or stores credentials.
+- **Packages follow dependencies; capabilities stay separate.** A package holds the capabilities that share its
+  dependencies, so a host takes on a dependency only when it uses one of them; each capability keeps its own contract
+  and can be adopted on its own. Several bindings of one capability are still one capability.
+- **The caller owns the model.** A capability that uses a model takes it from the caller — in the .NET binding, an
+  injected `IChatClient`. No package creates clients, reads configuration, or stores credentials.
 - **Code holds the invariants.** Model output is parsed and validated deterministically — counts, timings,
-  and structure are guaranteed by the library, not requested in a prompt.
-- **Host-agnostic.** No package knows about the application using it — any .NET host takes them the same
-  way, whether it calls the SDK directly, runs the CLI, or connects to the MCP server.
-- **The same shape everywhere.** Each feature has a request/result API in its SDK. The CLI and MCP surfaces
-  wrap that API, so the three never drift apart.
+  and structure are guaranteed by the implementation, not requested in a prompt, and the contract states them.
+- **Host-agnostic.** No package knows about the application using it. A host written in any language takes a
+  capability the same way, through whichever of its library, CLI, file-system or MCP ways it uses.
+- **The contract sets the shape.** Each capability's contract — tools, events, inputs, results, invariants, errors —
+  is written down without reference to a language, in `docs/`. Every way of reaching the capability follows it, so
+  they never drift apart. The channel connector's contract is the first one written; for the other capabilities the SDK's
+  request/result API still stands in for it.
+- **The language fits the problem.** An implementation is written in the language that best fits what it has to
+  do. The repository as a whole is not tied to one language.
 
 ## Repository layout
 
 ```
+docs/                                # Language-neutral capability contracts
 src/
-├── core/Pulsa/                      # Shared base layer
+├── core/Pulsa/                      # Pulsa — no dependency beyond the chat model
 ├── sdk/
-│   ├── Pulsa.Redact.SDK/            # PulsaRedact.SDK
-│   ├── Pulsa.Transcript.SDK/        # PulsaTranscript.SDK
-│   └── Pulsa.VideoCompose.SDK/      # PulsaVideoCompose.SDK
+│   ├── Pulsa.Channel.SDK/           # PulsaChannel.SDK
+│   ├── Pulsa.Channel.Telegram/      # PulsaChannel.Telegram
+│   └── Pulsa.Media/                 # PulsaMedia — ffmpeg
 └── workers/
-    └── Pulsa.VideoCompose.Cli/      # PulsaVideoCompose.Cli
-tests/                               # xUnit test projects, one per SDK
+    ├── Pulsa.Channel.Cli/           # PulsaChannel.Cli
+    └── Pulsa.Media.Cli/             # PulsaMedia.Cli
+tests/                               # xUnit test projects
 ```
+
+Everything under `src/` and `tests/` is .NET today; the layout for a second language is decided when the first
+capability in one arrives.
 
 ## Building and testing
 
