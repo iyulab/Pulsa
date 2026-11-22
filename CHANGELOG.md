@@ -5,6 +5,7 @@ maintainer who publishes it.
 
 ## Unreleased
 
+- Tests: the live video-composition tests skip, with the reason, on an ffmpeg built without the `subtitles` filter (libass) instead of failing.
 - **Breaking — packages are cut by the dependency they bring.** A consumer decides whether to take on a dependency
   (ffmpeg, a service, a library), so capabilities that share one now share a package. Namespaces and types are unchanged;
   only package references move:
