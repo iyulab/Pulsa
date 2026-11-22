@@ -3,15 +3,15 @@
 Turns recorded speech into a transcript with speakers and times. Recognition is the model's work; Pulsa owns what
 happens around it — preparing the audio, cutting it into speech segments, putting speakers on the segments, refining
 the words — and guarantees the result's timing and structure whichever models fill the stages. Status: **draft** —
-the facade is implemented in `Pulsa` (library way, with built-in silence detection); the `PulsaMedia` preparer, the CLI
-and model adapters for the other stages are not. This contract may change before the first release.
+the facade (in `Pulsa`, with built-in silence detection), the ffmpeg preparer (in `PulsaMedia`) and the CLI are
+implemented; model adapters for voice activity and diarization are not. This contract may change before the first release.
 
 - **Module**: the facade (options, stage composition, invariant checks) is in `Pulsa`, which brings no dependency
   beyond the models the caller supplies. Every stage is a port, so `Pulsa` references no stage module: audio
   preparation is implemented in `PulsaMedia`, which brings ffmpeg, and a stage that needs another dependency gets its
   own module. Turning an option on means taking on that stage's module.
-- **Ways in**: library (`Transcriber.TranscribeAsync`), CLI (`PulsaMedia.Cli transcribe`, not yet). The CLI is a host: it
-  chooses the recognition model from its own flags. In .NET the speech-to-text abstraction is an evaluation API
+- **Ways in**: library (`Transcriber.TranscribeAsync`), CLI (`PulsaMedia.Cli transcribe`). The CLI is a host: it chooses the
+  recognition model from its own flags (an OpenAI or OpenAI-compatible transcription endpoint). In .NET the speech-to-text abstraction is an evaluation API
   (diagnostic `MEAI001`), and the facade carries the same diagnostic.
 - **Model**: required — recognition is a speech-to-text model the caller supplies (`ISpeechToTextClient` in .NET).
   Extending: a voice-activity model gives tighter segments than the built-in silence detection, a diarization model
@@ -76,6 +76,15 @@ Checked before any audio is processed, and refused with an exception:
 
 During the run, errors from a port are passed through and end the whole call: no partial transcript is returned.
 Cancellation also ends the call. A segment the recognizer returns no text for is dropped and named in `warnings`.
+
+## CLI
+
+`PulsaMedia.Cli transcribe --input <audio or video> --openai-key <key>` always prepares with ffmpeg and segments by
+silence. Options: `--output <file.vtt>` (otherwise standard output), `--openai-model`, `--openai-endpoint` (any
+OpenAI-compatible transcription server), `--language`, `--noise-reduction`, `--no-loudness`, `--max-segment`,
+`--min-silence`, and refinement with `--glossary <file.md> --refine-model <model>` (both or neither). The exit code is 0
+with the WebVTT written; otherwise 1 with the reason on standard error. Warnings and refused corrections go to standard
+error and do not change the exit code.
 
 ## Quality
 

@@ -63,9 +63,9 @@ evidence, is in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 | Package | Description | Surfaces | NuGet |
 |---|---|---|---|
-| `Pulsa` | Capabilities that bring no dependency beyond the chat model you supply: refine a speech-to-text transcript (WebVTT) behind a sound-alike acceptance gate, and draft on-screen captions | SDK | [![NuGet](https://img.shields.io/nuget/v/Pulsa.svg)](https://www.nuget.org/packages/Pulsa) |
-| `PulsaMedia` | Capabilities that need ffmpeg: compose images and captions into a captioned, Ken Burns–animated video, and pixelate a region of an image or a time range of a video | SDK | not yet published |
-| `PulsaMedia.Cli` | `PulsaMedia` as an executable: `compose`, `draft-captions`, `redact` | CLI | not yet published |
+| `Pulsa` | Capabilities that bring no dependency beyond the models you supply: transcription (draft — speech segments, speakers and refinement around your speech-to-text model), refine a speech-to-text transcript (WebVTT) behind a sound-alike acceptance gate, and draft on-screen captions | SDK | [![NuGet](https://img.shields.io/nuget/v/Pulsa.svg)](https://www.nuget.org/packages/Pulsa) |
+| `PulsaMedia` | Capabilities that need ffmpeg: compose images and captions into a captioned, Ken Burns–animated video, pixelate a region of an image or a time range of a video, and prepare any audio for transcription | SDK | not yet published |
+| `PulsaMedia.Cli` | `PulsaMedia` as an executable: `compose`, `draft-captions`, `redact`, `transcribe` | CLI | not yet published |
 | `PulsaChannel.SDK` | One-to-one messaging channel contract, in-memory fake provider, ordered event queue ([contract](docs/channel-connector.md)) | SDK | not yet published |
 | `PulsaChannel.Telegram` | Telegram provider for the channel contract (Bot API over HTTPS) | SDK | not yet published |
 | `PulsaChannel.Cli` | The channel connector as an executable: an MCP server (`serve`) and `send` · `status` · `listen` | MCP · CLI | not yet published |
@@ -164,6 +164,25 @@ var result = await redactor.RedactAsync(new RedactRequest(
     X: 120, Y: 80, Width: 320, Height: 180,   // pixels, in the source's native resolution
     StartTime: 5, EndTime: 12));             // seconds; video only — omit for the whole video or an image
 ```
+
+### Transcription — `Pulsa` (draft)
+
+```csharp
+using PulsaTranscribe;
+using PulsaTranscript;   // WebVtt
+
+// recognizer: any ISpeechToTextClient (Microsoft.Extensions.AI). The other stages are optional ports.
+var result = await Transcriber.TranscribeAsync(recognizer, new TranscribeRequest("meeting.m4a") { Language = "ko" },
+    new TranscribeStages { Preparer = new FfmpegAudioPreparer("./ffmpeg") });   // FfmpegAudioPreparer is in PulsaMedia
+
+File.WriteAllText("meeting.vtt", WebVtt.Write(result.Cues));
+// result.Stages — what ran; result.Warnings — what was skipped and why
+```
+
+Without a preparer the input must be 16 kHz mono PCM WAV. Cues are on the input's timeline, in order and never
+overlapping; a diarizer adds speakers (`S1`, `S2`, …) and a chat client refines the words. The contract, with its
+invariants and failures, is [docs/transcribe.md](docs/transcribe.md). From a shell:
+`PulsaMedia.Cli transcribe --input meeting.m4a --openai-key <key> --output meeting.vtt`.
 
 ### Transcript refinement — `Pulsa`
 

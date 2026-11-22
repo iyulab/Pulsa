@@ -8,7 +8,10 @@ maintainer who publishes it.
 - **Transcription facade (draft)** in `Pulsa`: `Transcriber.TranscribeAsync` turns 16 kHz mono WAV — or any audio an
   `IAudioPreparer` reads — into cues on the input's timeline, recognized per speech segment by the caller's
   `ISpeechToTextClient`, with optional voice-activity, diarization and refinement stages as ports and built-in
-  silence detection. Contract: `docs/transcribe.md`. Carries the `MEAI001` evaluation diagnostic.
+  silence detection. `PulsaMedia` adds `FfmpegAudioPreparer` (any audio or video → 16 kHz mono, optional loudness
+  normalization and noise reduction) and `PulsaMedia.Cli transcribe` writes WebVTT through an OpenAI or OpenAI-compatible
+  transcription endpoint. Contract: `docs/transcribe.md`. Carries the `MEAI001` evaluation diagnostic.
+- Reading a 16 kHz WAV never trusts a chunk size for allocation.
 - **Transcription contract (draft, not implemented).** [docs/transcribe.md](docs/transcribe.md): recorded speech to a
   transcript with speakers and times — stages (prepare, segment, recognize, diarize, refine), each after preparation a
   port the caller fills, the invariants on timing and speakers, failures and how quality is measured. No package changes.
@@ -24,7 +27,8 @@ maintainer who publishes it.
   | `PulsaVideoCompose.Cli` | `PulsaMedia.Cli`, which also gains `redact` |
 
   Replace all of the retired packages in the same step. A retired package kept beside `Pulsa` or `PulsaMedia` defines the
-  same types a second time, and using one of them fails to compile (CS0433). `PulsaMedia` no longer depends on `Pulsa`.
+  same types a second time, and using one of them fails to compile (CS0433). `PulsaMedia` depends on `Pulsa` only for the stage ports it implements
+  (transcription's audio preparation); `Pulsa` never depends on `PulsaMedia`.
   The README's package table, installation, usage headings and repository layout follow the new packages, and its
   design principle reads "packages follow dependencies; capabilities stay separate".
 - **README: what Pulsa is, stated without tying it to .NET.** Pulsa is described as parts for building AI agents and AI

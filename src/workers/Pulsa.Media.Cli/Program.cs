@@ -1,6 +1,8 @@
 using Microsoft.Extensions.AI;
 using OpenAI;
 using PulsaRedact;
+using PulsaTranscribe;
+using PulsaTranscript;
 using PulsaVideoCompose;
 
 if (args.Length == 0)
@@ -17,6 +19,8 @@ switch (args[0])
         return await RunDraftCaptionsAsync(args[1..]);
     case "redact":
         return await RunRedactAsync(args[1..]);
+    case "transcribe":
+        return await RunTranscribeAsync(args[1..]);
     default:
         PrintUsage();
         return 1;
@@ -32,6 +36,10 @@ static void PrintUsage()
           PulsaMedia.Cli draft-captions --images <path...> --intro <text> --openai-key <key> [--openai-model <model>]
           PulsaMedia.Cli redact --input <path> --output <path> --region <x>,<y>,<width>,<height>
                 [--start <seconds>] [--end <seconds>] [--ffmpeg-dir <dir>]
+          PulsaMedia.Cli transcribe --input <audio or video> --openai-key <key> [--output <file.vtt>]
+                [--openai-model <model>] [--openai-endpoint <url>] [--language <bcp47>]
+                [--noise-reduction] [--no-loudness] [--max-segment <seconds>] [--min-silence <seconds>]
+                [--glossary <file.md> --refine-model <model>] [--ffmpeg-dir <dir>]
         """);
 }
 
@@ -136,6 +144,81 @@ static async Task<int> RunRedactAsync(string[] args)
     Console.WriteLine($"Wrote {result.OutputPath}");
     return 0;
 }
+
+#pragma warning disable MEAI001 // the speech-to-text abstraction is an evaluation API
+static async Task<int> RunTranscribeAsync(string[] args)
+{
+    var options = ParseFlags(args);
+    string? Single(string key) => options.TryGetValue(key, out var v) && v.Length > 0 ? string.Join(' ', v) : null;
+    double? Seconds(string key) => Single(key) is { } text
+        ? double.Parse(text, System.Globalization.CultureInfo.InvariantCulture)
+        : null;
+
+    var input = Single("input");
+    var apiKey = Single("openai-key");
+    if (input is null || apiKey is null)
+    {
+        Console.Error.WriteLine("transcribe needs --input and --openai-key");
+        PrintUsage();
+        return 1;
+    }
+    var glossaryPath = Single("glossary");
+    var refineModel = Single("refine-model");
+    if ((glossaryPath is null) != (refineModel is null))
+    {
+        Console.Error.WriteLine("--glossary and --refine-model go together: refinement needs both");
+        return 1;
+    }
+
+    // The command line is a host: it picks the models and takes the credential; the facade only receives clients.
+    var clientOptions = new OpenAIClientOptions();
+    if (Single("openai-endpoint") is { } endpoint) clientOptions.Endpoint = new Uri(endpoint);
+    var openAi = new OpenAIClient(new System.ClientModel.ApiKeyCredential(apiKey), clientOptions);
+    var recognizer = openAi.GetAudioClient(Single("openai-model") ?? "gpt-4o-mini-transcribe").AsISpeechToTextClient();
+
+    var request = new TranscribeRequest(input)
+    {
+        Language = Single("language"),
+        Prepare = new PrepareOptions(
+            NoiseReduction: options.ContainsKey("noise-reduction"),
+            NormalizeLoudness: !options.ContainsKey("no-loudness")),
+        Glossary = glossaryPath is null ? null : Glossary.FromMarkdown(await File.ReadAllTextAsync(glossaryPath)),
+    };
+    if (Seconds("max-segment") is { } max) request = request with { MaximumSegment = TimeSpan.FromSeconds(max) };
+    if (Seconds("min-silence") is { } min) request = request with { MinimumSilence = TimeSpan.FromSeconds(min) };
+    var stages = new TranscribeStages
+    {
+        Preparer = new FfmpegAudioPreparer(Single("ffmpeg-dir") ?? string.Empty), // empty: ffmpeg on PATH
+        Refiner = refineModel is null ? null : openAi.GetChatClient(refineModel).AsIChatClient(),
+    };
+
+    TranscribeResult result;
+    try
+    {
+        result = await Transcriber.TranscribeAsync(recognizer, request, stages);
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"transcribe failed: {ex.Message}");
+        return 1;
+    }
+
+    var vtt = WebVtt.Write(result.Cues);
+    if (Single("output") is { } output)
+    {
+        await File.WriteAllTextAsync(output, vtt);
+        Console.Error.WriteLine($"Wrote {output} ({result.Cues.Count} cues)");
+    }
+    else
+    {
+        Console.Write(vtt);
+    }
+    foreach (var warning in result.Warnings) Console.Error.WriteLine($"warning: {warning}");
+    foreach (var change in result.Rejected)
+        Console.Error.WriteLine($"refused correction, cue {change.Index}: \"{change.Original}\" -> \"{change.Refined}\"");
+    return 0;
+}
+#pragma warning restore MEAI001
 
 static Dictionary<string, string[]> ParseFlags(string[] args)
 {
