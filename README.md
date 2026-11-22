@@ -8,7 +8,7 @@
 not build into its own core.**
 
 Pulsa is a set of components *for* AI: what uses them is an agent or an AI service. Each capability is split off on its
-own and put behind a contract of tools and events. It carries its own dependencies, is tested and versioned on its own,
+own and put behind a contract. It carries its own dependencies, is tested and versioned on its own,
 and can run in its own process. The model, the configuration, the credentials and the host's policies stay with the
 product that uses it. Most capabilities pair a model the caller supplies with the processing that makes it useful for
 one kind of work: parsing, validation, media handling, and the guarantees a model alone cannot give. A capability can
@@ -46,9 +46,11 @@ core. A capability belongs here when:
   product could need the same thing.
 - **It is a dependency boundary or needs its own process.** It brings dependencies (a native tool such as ffmpeg, a
   model format, a heavy library) that a host should take on only when it uses the capability, or a licence or a
-  native runtime means it should run beside the host, not inside it. That is what the CLI and MCP surfaces are for.
-- **It reaches an agent as tools or events.** Only a capability an agent can be handed, as tools it calls or events
-  it reacts to, is admitted.
+  native runtime means it should run beside the host, not inside it. That is what the CLI, file-system and MCP ways
+  are for.
+- **It can be handed over as a contract.** Its inputs, results and invariants can be written down without reference
+  to a language, and an agent could use that contract as a tool. It does not have to ship an MCP server: a capability
+  offers the ways its consumers need.
 
 A single prompt or a single call is not a capability and stays in the application. A capability whose value comes
 from one application's domain stays in that application's own plugin. Who accepts a new capability, and on what

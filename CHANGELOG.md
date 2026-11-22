@@ -10,7 +10,10 @@ maintainer who publishes it.
   credentials and host policies left to the product that uses them. A capability reaches its consumer as a library, a
   CLI, asynchronously through the file system, or as an MCP server — whichever its consumers need — and reliability is
   stated as what it must deliver. The design principles no longer assume a .NET host: a capability's language-neutral
-  contract sets its shape, and each implementation is written in the language that fits the problem. The package table and repository layout now list the channel connector packages (not yet
+  contract sets its shape, and each implementation is written in the language that fits the problem.
+  The third admission condition now reads "it can be handed over as a contract" instead of "it reaches an agent as tools
+  or events". CONTRIBUTING describes how a capability built before it has a consumer is verified (by another editing
+  project, through its CLI) and published (as a prerelease until its first consumer). The package table and repository layout now list the channel connector packages (not yet
   published). No package changes.
 - **Channel connector (design, new packages — not yet published).** A one-to-one messaging channel behind one contract:
   `PulsaChannel.SDK` (contract, in-memory fake provider, ordered event queue with a read cursor, credential redaction) and
