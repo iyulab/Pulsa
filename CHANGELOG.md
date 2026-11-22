@@ -5,6 +5,19 @@ maintainer who publishes it.
 
 ## Unreleased
 
+- **Breaking — packages are cut by the dependency they bring.** A consumer decides whether to take on a dependency
+  (ffmpeg, a service, a library), so capabilities that share one now share a package. Namespaces and types are unchanged;
+  only package references move:
+
+  | Before | After |
+  |---|---|
+  | `PulsaVideoCompose.SDK` | `PulsaMedia` (ffmpeg) — caption drafting moved to `Pulsa` |
+  | `PulsaRedact.SDK` | `PulsaMedia` (ffmpeg) |
+  | `PulsaTranscript.SDK` | `Pulsa` (no dependency beyond the chat model you supply) |
+  | `PulsaVideoCompose.Cli` | `PulsaMedia.Cli`, which also gains `redact` |
+
+  Replace all of the retired packages in the same step. A retired package kept beside `Pulsa` or `PulsaMedia` defines the
+  same types a second time, and using one of them fails to compile (CS0433). `PulsaMedia` no longer depends on `Pulsa`.
 - **Channel connector (design, new packages — not yet published).** A one-to-one messaging channel behind one contract:
   `PulsaChannel.SDK` (contract, in-memory fake provider, ordered event queue with a read cursor, credential redaction) and
   `PulsaChannel.Telegram` (Telegram Bot API over plain HTTPS, no client library). The contract is in

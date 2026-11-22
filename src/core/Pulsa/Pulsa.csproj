@@ -2,8 +2,8 @@
 
   <PropertyGroup>
     <Version>0.1.1</Version>
-    <Description>Pulsa's shared base layer for reusable AI features — every Pulsa package builds on Microsoft.Extensions.AI.Abstractions through this project, rather than each declaring the dependency independently.</Description>
-    <PackageTags>pulsa;ai</PackageTags>
+    <Description>Pulsa's module of capabilities that bring no dependency beyond a chat model the caller supplies: refine a speech-to-text transcript behind a sound-alike acceptance gate, and draft on-screen captions. Host-agnostic.</Description>
+    <PackageTags>pulsa;ai;transcript;stt;webvtt;glossary;captions</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>

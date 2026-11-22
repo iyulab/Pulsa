@@ -46,7 +46,7 @@ jobs:
           fi
 
   # Pack every package this push changed into one artifact, and hand it to the organization's central publisher in one call: the
-  # packages land together, so an SDK (whose nuspec carries a hard dependency on Pulsa) is never on nuget.org ahead of the Pulsa
+  # packages land together, so a package whose nuspec depends on Pulsa is never on nuget.org ahead of the Pulsa
   # version it needs. CORRECTNESS PRECONDITION (2026-09-04): nuget.org's existing `Pulsa 0.1.0` (published 2026-03-19) is a
   # different, older library that shares this id and version — bump src/core/Pulsa/Pulsa.csproj's <Version> before the first real
   # publish, or the push is refused as a duplicate of a stranger.
