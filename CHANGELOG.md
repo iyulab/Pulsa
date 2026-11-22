@@ -5,6 +5,8 @@ maintainer who publishes it.
 
 ## Unreleased
 
+- **Grounded extraction contract (draft)**: `docs/extract.md` — fields a schema names, each proven against the text by
+  the place it was read from, unsupported values refused with the reason. No package changes yet.
 - **Breaking — packages are cut by the dependency they bring.** A consumer decides whether to take on a dependency
   (ffmpeg, a service, a library), so capabilities that share one now share a package. Namespaces and types are unchanged;
   only package references move:
