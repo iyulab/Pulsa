@@ -3,14 +3,16 @@
 Turns recorded speech into a transcript with speakers and times. Recognition is the model's work; Pulsa owns what
 happens around it — preparing the audio, cutting it into speech segments, putting speakers on the segments, refining
 the words — and guarantees the result's timing and structure whichever models fill the stages. Status: **draft** —
-nothing is implemented yet, and this contract may change before the first release.
+the facade is implemented in `Pulsa` (library way, with built-in silence detection); the `PulsaMedia` preparer, the CLI
+and model adapters for the other stages are not. This contract may change before the first release.
 
 - **Module**: the facade (options, stage composition, invariant checks) is in `Pulsa`, which brings no dependency
   beyond the models the caller supplies. Every stage is a port, so `Pulsa` references no stage module: audio
   preparation is implemented in `PulsaMedia`, which brings ffmpeg, and a stage that needs another dependency gets its
   own module. Turning an option on means taking on that stage's module.
-- **Ways in**: library (`Transcriber.TranscribeAsync`), CLI (`PulsaMedia.Cli transcribe`). The CLI is a host: it chooses
-  the recognition model from its own flags.
+- **Ways in**: library (`Transcriber.TranscribeAsync`), CLI (`PulsaMedia.Cli transcribe`, not yet). The CLI is a host: it
+  chooses the recognition model from its own flags. In .NET the speech-to-text abstraction is an evaluation API
+  (diagnostic `MEAI001`), and the facade carries the same diagnostic.
 - **Model**: required — recognition is a speech-to-text model the caller supplies (`ISpeechToTextClient` in .NET).
   Extending: a voice-activity model gives tighter segments than the built-in silence detection, a diarization model
   puts speakers on the segments, and a chat model refines the words ([transcript refinement](transcript-refine.md)).
@@ -91,5 +93,6 @@ terms, is decided before the first implementation.
 - The shape of the voice-activity and diarizer ports, and whether a model supply layer already offers them.
 - A recognizer that also returns speakers: whether it fills the diarize stage itself, or diarization stays a separate
   call so speaker labels hold across segments.
-- Whether recognition is called once per segment or once per file with segments mapped afterwards, when the
-  recognizer returns its own times.
+- Recognition is called once per segment today, and the times a recognizer reports inside a segment are not used yet
+  (a cue is one segment). Whether to split a segment on them, and whether to call once per file when the recognizer
+  returns its own times, is open.

@@ -5,6 +5,10 @@ maintainer who publishes it.
 
 ## Unreleased
 
+- **Transcription facade (draft)** in `Pulsa`: `Transcriber.TranscribeAsync` turns 16 kHz mono WAV — or any audio an
+  `IAudioPreparer` reads — into cues on the input's timeline, recognized per speech segment by the caller's
+  `ISpeechToTextClient`, with optional voice-activity, diarization and refinement stages as ports and built-in
+  silence detection. Contract: `docs/transcribe.md`. Carries the `MEAI001` evaluation diagnostic.
 - **Transcription contract (draft, not implemented).** [docs/transcribe.md](docs/transcribe.md): recorded speech to a
   transcript with speakers and times — stages (prepare, segment, recognize, diarize, refine), each after preparation a
   port the caller fills, the invariants on timing and speakers, failures and how quality is measured. No package changes.
