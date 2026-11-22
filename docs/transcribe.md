@@ -90,7 +90,10 @@ error and do not change the exit code.
 
 The capability is measured, not only tested. Each change to a stage is measured again on the same recordings:
 
-- word error rate (character error rate for languages written without spaces between words, such as Korean);
+- word error rate (character error rate for languages written without spaces between words, such as Korean) —
+  edits (substitutions, deletions, insertions) on one optimal alignment over the reference's length, after both texts
+  are normalized alike (NFC, lower case, punctuation dropped, whitespace collapsed; the character rate also drops
+  spaces). The library computes both (`TranscriptScore`), so a consumer measures its own model the same way;
 - diarization error rate, when speakers are on;
 - segment boundary offset against reference times.
 
