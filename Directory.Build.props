@@ -14,6 +14,14 @@
     <RepositoryUrl>https://github.com/iyulab/Pulsa</RepositoryUrl>
   </PropertyGroup>
 
+  <!-- A package's NuGet page shows the README.md next to its project file -->
+  <PropertyGroup Condition="Exists('$(MSBuildProjectDirectory)\README.md')">
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup Condition="Exists('$(MSBuildProjectDirectory)\README.md')">
+    <None Include="$(MSBuildProjectDirectory)\README.md" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
+
   <!-- Local NuGet package source for development -->
   <PropertyGroup Condition="Exists('D:\local-nuget-packages')">
     <RestoreAdditionalProjectSources>

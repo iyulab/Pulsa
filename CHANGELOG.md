@@ -5,6 +5,7 @@ maintainer who publishes it.
 
 ## Unreleased
 
+- Each published package (`Pulsa`, `PulsaMedia`, `PulsaMedia.Cli`) carries its own README, shown on its NuGet page.
 - **Breaking — packages are cut by the dependency they bring.** A consumer decides whether to take on a dependency
   (ffmpeg, a service, a library), so capabilities that share one now share a package. Namespaces and types are unchanged;
   only package references move:
