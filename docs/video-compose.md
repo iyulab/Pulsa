@@ -58,6 +58,7 @@ The composer throws nothing for a request it can judge. The result carries `succ
 - a card has its image without its text, or its text without its image;
 - the aspect ratio is unknown;
 - a style is invalid;
+- the scene duration is not positive;
 - the fonts folder is missing;
 - ffmpeg fails.
 
