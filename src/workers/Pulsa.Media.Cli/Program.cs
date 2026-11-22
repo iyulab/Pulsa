@@ -30,8 +30,10 @@ static void PrintUsage()
                 [--aspect-ratio 16:9|9:16] [--title-image <path> --title-text <text>] [--outro-image <path> --outro-text <text>]
                 [--font <font name>] [--fonts-dir <dir>]
           PulsaMedia.Cli draft-captions --images <path...> --intro <text> --openai-key <key> [--openai-model <model>]
-          PulsaMedia.Cli redact --input <path> --output <path> --region <x>,<y>,<width>,<height>
+          PulsaMedia.Cli redact --input <path> --output <path> --region <x>,<y>,<width>,<height> [<x>,<y>,<width>,<height> ...]
                 [--start <seconds>] [--end <seconds>] [--ffmpeg-dir <dir>]
+          PulsaMedia.Cli redact --input <image> --output <path> --detect <what to hide> --openai-key <key>
+                [--openai-model <model>] [--openai-endpoint <url>] [--min-confidence <0-1>] [--region ...] [--ffmpeg-dir <dir>]
         """);
 }
 
@@ -101,33 +103,59 @@ static async Task<int> RunRedactAsync(string[] args)
 
     var input = Single("input");
     var output = Single("output");
-    var region = Single("region");
-    if (input is null || output is null || region is null)
+    var regionTexts = options.TryGetValue("region", out var r) ? r : [];
+    var detect = Single("detect");
+    if (input is null || output is null || (regionTexts.Length == 0 && detect is null))
     {
-        Console.Error.WriteLine("redact needs --input, --output and --region <x>,<y>,<width>,<height>");
+        Console.Error.WriteLine("redact needs --input, --output and --region <x>,<y>,<width>,<height> or --detect <what to hide>");
         PrintUsage();
         return 1;
     }
 
-    var parts = region.Split(',', StringSplitOptions.TrimEntries);
-    var numbers = new int[4];
-    if (parts.Length != 4 || !parts.Select((p, i) => int.TryParse(p, System.Globalization.NumberStyles.Integer,
-            System.Globalization.CultureInfo.InvariantCulture, out numbers[i])).All(ok => ok))
+    var regions = new List<RedactRegion>();
+    foreach (var region in regionTexts)
     {
-        Console.Error.WriteLine($"--region must be four whole numbers <x>,<y>,<width>,<height>, not '{region}'");
-        return 1;
+        var parts = region.Split(',', StringSplitOptions.TrimEntries);
+        var numbers = new int[4];
+        if (parts.Length != 4 || !parts.Select((p, i) => int.TryParse(p, System.Globalization.NumberStyles.Integer,
+                System.Globalization.CultureInfo.InvariantCulture, out numbers[i])).All(ok => ok))
+        {
+            Console.Error.WriteLine($"--region must be four whole numbers <x>,<y>,<width>,<height>, not '{region}'");
+            return 1;
+        }
+        regions.Add(new RedactRegion(numbers[0], numbers[1], numbers[2], numbers[3]));
     }
 
-    double? Seconds(string key) => Single(key) is { } text
+    double? Number(string key) => Single(key) is { } text
         ? double.Parse(text, System.Globalization.CultureInfo.InvariantCulture)
         : null;
 
+    RedactDetection? detection = null;
+    if (detect is not null)
+    {
+        if (Single("openai-key") is not { } apiKey)
+        {
+            Console.Error.WriteLine("--detect needs --openai-key: detection asks a vision model");
+            return 1;
+        }
+        // The command line is a host: it picks the vision model and takes the credential.
+        var clientOptions = new OpenAIClientOptions();
+        if (Single("openai-endpoint") is { } endpoint) clientOptions.Endpoint = new Uri(endpoint);
+        var vision = new OpenAIClient(new System.ClientModel.ApiKeyCredential(apiKey), clientOptions)
+            .GetChatClient(Single("openai-model") ?? "gpt-4o-mini").AsIChatClient();
+        detection = new RedactDetection(new ChatRegionDetector(vision, detect), Number("min-confidence") ?? 0.5);
+    }
+
     // No --ffmpeg-dir: ffmpeg is looked up on PATH.
     var redactor = new MediaRedactor(Single("ffmpeg-dir") ?? string.Empty);
-    var result = await redactor.RedactAsync(new RedactRequest(
-        input, output, numbers[0], numbers[1], numbers[2], numbers[3],
-        StartTime: Seconds("start"), EndTime: Seconds("end")));
+    var result = await redactor.RedactAsync(
+        new RedactRequest(input, output, regions, StartTime: Number("start"), EndTime: Number("end")), detection);
 
+    foreach (var found in result.Detected)
+        Console.Error.WriteLine($"hidden: {found.Label} at {found.Region.X},{found.Region.Y} {found.Region.Width}x{found.Region.Height} (confidence {found.Confidence:0.00})");
+    foreach (var doubtful in result.Review)
+        Console.Error.WriteLine($"review: {doubtful.Label} at {doubtful.Region.X},{doubtful.Region.Y} {doubtful.Region.Width}x{doubtful.Region.Height} (confidence {doubtful.Confidence:0.00}) — not hidden");
+    foreach (var note in result.Notes) Console.Error.WriteLine($"note: {note}");
     if (!result.Success)
     {
         Console.Error.WriteLine($"redact failed: {result.Error}");

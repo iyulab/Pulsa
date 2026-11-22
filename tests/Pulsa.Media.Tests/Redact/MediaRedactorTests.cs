@@ -33,7 +33,7 @@ public class MediaRedactorTests : IDisposable
         await File.WriteAllBytesAsync(outputPath, [0], TestContext.Current.CancellationToken);
 
         var result = await _redactor.RedactAsync(new RedactRequest(
-            InputPath: "in.png", OutputPath: outputPath, X: 0, Y: 0, Width: 10, Height: 10), TestContext.Current.CancellationToken);
+            InputPath: "in.png", OutputPath: outputPath, Regions: [new RedactRegion(0, 0, 10, 10)]), TestContext.Current.CancellationToken);
 
         result.Success.Should().BeFalse();
         result.Error.Should().Contain($"{outputPath} already exists");
@@ -44,7 +44,7 @@ public class MediaRedactorTests : IDisposable
     {
         var result = await _redactor.RedactAsync(new RedactRequest(
             InputPath: Path.Combine(_tempDir, "missing.png"),
-            OutputPath: Path.Combine(_tempDir, "out.png"), X: 0, Y: 0, Width: 10, Height: 10), TestContext.Current.CancellationToken);
+            OutputPath: Path.Combine(_tempDir, "out.png"), Regions: [new RedactRegion(0, 0, 10, 10)]), TestContext.Current.CancellationToken);
 
         result.Success.Should().BeFalse();
         result.Error.Should().Contain("missing.png");
@@ -64,7 +64,7 @@ public class MediaRedactorTests : IDisposable
         // simply ignored rather than rejected up front.
         var result = await _redactor.RedactAsync(new RedactRequest(
             InputPath: inputPath, OutputPath: Path.Combine(_tempDir, "out.png"),
-            X: 0, Y: 0, Width: 10, Height: 10, StartTime: 1, EndTime: 2), TestContext.Current.CancellationToken);
+            Regions: [new RedactRegion(0, 0, 10, 10)], StartTime: 1, EndTime: 2), TestContext.Current.CancellationToken);
 
         result.Success.Should().BeFalse();
         result.Error.Should().NotContain("startTime and endTime"); // not PixelateFilterBuilder's own guard
@@ -88,10 +88,107 @@ public class MediaRedactorTests : IDisposable
 
         var act = () => _redactor.RedactAsync(new RedactRequest(
             InputPath: inputPath, OutputPath: Path.Combine(_tempDir, "out.mp4"),
-            X: 0, Y: 0, Width: 10, Height: 10, StartTime: 2.0));
+            Regions: [new RedactRegion(0, 0, 10, 10)], StartTime: 2.0));
 
         var result = await act.Should().NotThrowAsync();
         result.Which.Success.Should().BeFalse();
+    }
+
+    // --- Detection: the model role
+
+    private sealed class FixedDetector(params DetectedRegion[] regions) : IRegionDetector
+    {
+        public (int Width, int Height)? Seen { get; private set; }
+        public string Name => "fixed";
+
+        public Task<IReadOnlyList<DetectedRegion>> DetectAsync(string imagePath, int width, int height, CancellationToken cancellationToken)
+        {
+            Seen = (width, height);
+            return Task.FromResult<IReadOnlyList<DetectedRegion>>(regions);
+        }
+    }
+
+    [Fact]
+    public async Task RedactAsync_WithADetector_HidesConfidentRegions_ReturnsDoubtfulOnesForReview_AndRefusesOnesOutsideThePicture()
+    {
+        var redactor = new MediaRedactor(ResolveFfmpegBinaryFolder());
+        var inputPath = await CreateTestsrcPngAsync(Path.Combine(_tempDir, "detect-200x100.png"), 200, 100);
+        var outputPath = Path.Combine(_tempDir, "detect-200x100-redacted.png");
+        var detector = new FixedDetector(
+            new DetectedRegion(new RedactRegion(10, 10, 50, 30), "face", 0.9),
+            new DetectedRegion(new RedactRegion(120, 60, 40, 20), "plate", 0.3),
+            new DetectedRegion(new RedactRegion(500, 500, 40, 40), "ghost", 0.99),
+            new DetectedRegion(new RedactRegion(180, 80, 40, 40), "edge", 0.8));   // half outside: clipped to 20x20
+
+        var result = await redactor.RedactAsync(
+            new RedactRequest(inputPath, outputPath, Regions: []), new RedactDetection(detector), TestContext.Current.CancellationToken);
+
+        result.Success.Should().BeTrue(because: result.Error);
+        detector.Seen.Should().Be((200, 100));
+        result.Detected.Select(d => (d.Label, d.Region)).Should().Equal(
+            ("face", new RedactRegion(10, 10, 50, 30)), ("edge", new RedactRegion(180, 80, 20, 20)));
+        result.Review.Should().ContainSingle().Which.Label.Should().Be("plate");
+        result.Notes.Should().ContainSingle().Which.Should().Contain("ghost");
+
+        (await CropToRawRgbAsync(outputPath, 10, 10, 50, 30)).Should().NotEqual(await CropToRawRgbAsync(inputPath, 10, 10, 50, 30));
+        (await CropToRawRgbAsync(outputPath, 120, 60, 40, 20)).Should().Equal(
+            await CropToRawRgbAsync(inputPath, 120, 60, 40, 20), "a region below the confidence bar is not hidden");
+    }
+
+    [Fact]
+    public async Task RedactAsync_WithADetectorThatFindsNothingConfident_FailsAndWritesNothing()
+    {
+        var redactor = new MediaRedactor(ResolveFfmpegBinaryFolder());
+        var inputPath = await CreateTestsrcPngAsync(Path.Combine(_tempDir, "detect-none.png"), 100, 60);
+        var outputPath = Path.Combine(_tempDir, "detect-none-out.png");
+
+        var result = await redactor.RedactAsync(new RedactRequest(inputPath, outputPath, Regions: []),
+            new RedactDetection(new FixedDetector(new DetectedRegion(new RedactRegion(0, 0, 20, 20), "maybe", 0.1))),
+            TestContext.Current.CancellationToken);
+
+        result.Success.Should().BeFalse();
+        result.Review.Should().ContainSingle();
+        File.Exists(outputPath).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task RedactAsync_WithADetectorOnAVideo_IsRefused()
+    {
+        var inputPath = Path.Combine(_tempDir, "clip.mp4");
+        await File.WriteAllBytesAsync(inputPath, [0], TestContext.Current.CancellationToken);
+
+        var result = await _redactor.RedactAsync(new RedactRequest(inputPath, Path.Combine(_tempDir, "o.mp4"), Regions: []),
+            new RedactDetection(new FixedDetector()), TestContext.Current.CancellationToken);
+
+        result.Success.Should().BeFalse();
+        result.Error.Should().Contain("images only");
+    }
+
+    [Fact]
+    public async Task RedactAsync_NoRegionsAndNoDetector_IsRefused()
+    {
+        var inputPath = Path.Combine(_tempDir, "in.png");
+        await File.WriteAllBytesAsync(inputPath, [0], TestContext.Current.CancellationToken);
+
+        var result = await _redactor.RedactAsync(new RedactRequest(inputPath, Path.Combine(_tempDir, "o.png"), Regions: []),
+            TestContext.Current.CancellationToken);
+
+        result.Success.Should().BeFalse();
+        result.Error.Should().Contain("nothing to redact");
+    }
+
+    [Theory]
+    [InlineData(-10, -10, 30, 30, 0, 0, 20, 20)]
+    [InlineData(90, 50, 30, 30, 90, 50, 10, 10)]
+    public void Clip_KeepsThePartInsideThePicture(int x, int y, int w, int h, int ex, int ey, int ew, int eh)
+    {
+        MediaRedactor.Clip(new RedactRegion(x, y, w, h), 100, 60).Should().Be(new RedactRegion(ex, ey, ew, eh));
+    }
+
+    [Fact]
+    public void Clip_ARegionWithLessThanTwoPixelsInside_IsRefused()
+    {
+        MediaRedactor.Clip(new RedactRegion(99, 0, 10, 10), 100, 60).Should().BeNull();
     }
 
     private static string ResolveFfmpegBinaryFolder() =>
@@ -176,7 +273,7 @@ public class MediaRedactorTests : IDisposable
         const int x = 10, y = 10, width = 50, height = 30;
 
         var result = await redactor.RedactAsync(new RedactRequest(
-            InputPath: inputPath, OutputPath: outputPath, X: x, Y: y, Width: width, Height: height), TestContext.Current.CancellationToken);
+            InputPath: inputPath, OutputPath: outputPath, Regions: [new RedactRegion(x, y, width, height)]), TestContext.Current.CancellationToken);
 
         result.Success.Should().BeTrue(because: result.Error);
         File.Exists(outputPath).Should().BeTrue();
@@ -220,7 +317,7 @@ public class MediaRedactorTests : IDisposable
         const int x = 40, y = 20, width = 10, height = 8; // both smaller than default blockSize=16
 
         var result = await redactor.RedactAsync(new RedactRequest(
-            InputPath: inputPath, OutputPath: outputPath, X: x, Y: y, Width: width, Height: height), TestContext.Current.CancellationToken);
+            InputPath: inputPath, OutputPath: outputPath, Regions: [new RedactRegion(x, y, width, height)]), TestContext.Current.CancellationToken);
 
         result.Success.Should().BeTrue(because: result.Error);
         var regionBefore = await CropToRawRgbAsync(inputPath, x, y, width, height);
@@ -236,7 +333,7 @@ public class MediaRedactorTests : IDisposable
         var outputPath = Path.Combine(_tempDir, "clip-redacted.mp4");
 
         var result = await redactor.RedactAsync(new RedactRequest(
-            InputPath: inputPath, OutputPath: outputPath, X: 10, Y: 10, Width: 50, Height: 30), TestContext.Current.CancellationToken);
+            InputPath: inputPath, OutputPath: outputPath, Regions: [new RedactRegion(10, 10, 50, 30)]), TestContext.Current.CancellationToken);
 
         result.Success.Should().BeTrue();
         var probe = await FFProbe.AnalyseAsync(outputPath, ffOptions: new FFOptions { BinaryFolder = ResolveFfmpegBinaryFolder() }, cancellationToken: TestContext.Current.CancellationToken);
@@ -258,7 +355,7 @@ public class MediaRedactorTests : IDisposable
 
         var result = await redactor.RedactAsync(new RedactRequest(
             InputPath: inputPath, OutputPath: outputPath,
-            X: 10, Y: 10, Width: 50, Height: 30, StartTime: 1, EndTime: 3), TestContext.Current.CancellationToken);
+            Regions: [new RedactRegion(10, 10, 50, 30)], StartTime: 1, EndTime: 3), TestContext.Current.CancellationToken);
 
         result.Success.Should().BeTrue(because: result.Error);
         var probe = await FFProbe.AnalyseAsync(outputPath, ffOptions: new FFOptions { BinaryFolder = ResolveFfmpegBinaryFolder() }, cancellationToken: TestContext.Current.CancellationToken);

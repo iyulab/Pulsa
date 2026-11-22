@@ -13,7 +13,7 @@ and can run in its own process. The model, the configuration, the credentials an
 product that uses it. Most capabilities pair a model the caller supplies with the processing that makes it useful for
 one kind of work: parsing, validation, media handling, and the guarantees a model alone cannot give. Every capability
 has a role for a model. Either the model is required, or the capability runs deterministically without one and does
-more when it is handed one. Redaction, for example, hides the region it is told today; given a vision model it is to
+more when it is handed one. Redaction, for example, hides the regions it is told; given a vision model it can also
 find what to hide.
 
 A capability is defined by its contract, not by a programming language or by one way of calling it. What it has to do
@@ -161,8 +161,19 @@ var redactor = new MediaRedactor(ffmpegBinaryFolder: "./ffmpeg");
 var result = await redactor.RedactAsync(new RedactRequest(
     InputPath: "input.mp4",
     OutputPath: "redacted.mp4",
-    X: 120, Y: 80, Width: 320, Height: 180,   // pixels, in the source's native resolution
-    StartTime: 5, EndTime: 12));             // seconds; video only — omit for the whole video or an image
+    Regions: [new RedactRegion(120, 80, 320, 180)],   // pixels, in the source's native resolution
+    StartTime: 5, EndTime: 12));                     // seconds; video only — omit for the whole video or an image
+```
+
+Given a vision model (any `IChatClient` that takes images), redaction finds what to hide in an image. The code checks
+every region the model returns: it is clipped to the picture, hidden only above the confidence bar, and a doubtful one
+comes back in `result.Review` instead of being hidden:
+
+```csharp
+var detector = new ChatRegionDetector(visionClient, "faces and licence plates");
+var result = await redactor.RedactAsync(new RedactRequest("photo.jpg", "photo.redacted.jpg", Regions: []),
+    new RedactDetection(detector, MinimumConfidence: 0.6));
+// result.Detected — hidden; result.Review — found but not hidden; result.Notes — refused boxes
 ```
 
 ### Transcript refinement — `Pulsa`

@@ -14,46 +14,52 @@ namespace PulsaRedact;
 public static class PixelateFilterBuilder
 {
     public static string Build(
-        int x, int y, int width, int height,
+        IReadOnlyList<RedactRegion> regions,
         double? startTime = null, double? endTime = null, int blockSize = 16)
     {
+        ArgumentNullException.ThrowIfNull(regions);
+        if (regions.Count == 0)
+            throw new ArgumentException("Redaction needs at least one region.");
         if (startTime.HasValue != endTime.HasValue)
             throw new ArgumentException("startTime and endTime must both be supplied together, or neither.");
-        if (width <= 0 || height <= 0)
+        if (regions.Any(r => r.Width <= 0 || r.Height <= 0))
             throw new ArgumentException("width and height must both be positive.");
         if (startTime.HasValue && startTime.Value >= endTime!.Value)
             throw new ArgumentException("startTime must be less than endTime.");
 
         var inv = CultureInfo.InvariantCulture;
-        var crop = string.Format(inv, "crop={0}:{1}:{2}:{3}", width, height, x, y);
-        // Computed as integers in C#, floored to 1, and emitted as literals -- NOT as an ffmpeg
-        // expression string ("scale=width/blockSize:height/blockSize"). ffmpeg evaluates that
-        // expression as a double and truncates to int; `scale` treats a resulting 0 as "keep the
-        // input dimension" -- so any region smaller than blockSize on an axis (e.g. a 10x10 region
-        // with the default blockSize=16) silently skipped the downscale entirely and came back
-        // unpixelated while RedactResult.Success stayed true. See
-        // PixelateFilterBuilderTests.Build_RegionSmallerThanBlockSize_StillProducesNonTrivialDownscale
-        // and MediaRedactorTests' live sub-blockSize regression test.
-        var blockWidth = Math.Max(1, width / blockSize);
-        var blockHeight = Math.Max(1, height / blockSize);
-        var downscale = string.Format(inv, "scale={0}:{1}", blockWidth, blockHeight);
-        var upscale = string.Format(inv, "scale={0}:{1}:flags=neighbor", width, height);
-
         var enableClause = startTime.HasValue
             ? string.Format(inv, ":enable='between(t,{0},{1})'", startTime.Value, endTime!.Value)
             : string.Empty;
-        // format=auto lets overlay pick the best pixel format for what's actually feeding it,
-        // instead of falling back to its default internal yuv420 -- which would force the ENTIRE
-        // frame (not just the pixelated rectangle) through 4:2:0 chroma subsampling when the
-        // source is an RGB image. Video inputs are already yuv420p so they're unaffected either way.
-        var overlay = string.Format(inv, "overlay={0}:{1}:format=auto{2}", x, y, enableClause);
 
-        // ";" separates filterchains per ffmpeg's documented filter-graph grammar; "," (used
-        // above, inside each chain) separates filters within a single chain. The old code used
-        // "," for both, which happened to parse via ffmpeg's parser leniency but isn't the
-        // documented separator and isn't directly copy-pasteable as a standalone -filter_complex.
-        return string.Join(";",
-            $"[0:v]{crop},{downscale},{upscale}[blk]",
-            $"[0:v][blk]{overlay}");
+        var chains = new List<string>();
+        for (var i = 0; i < regions.Count; i++)
+        {
+            var (x, y, width, height) = regions[i];
+            var crop = string.Format(inv, "crop={0}:{1}:{2}:{3}", width, height, x, y);
+            // Computed as integers in C#, floored to 1, and emitted as literals -- NOT as an ffmpeg
+            // expression string ("scale=width/blockSize:height/blockSize"). ffmpeg evaluates that
+            // expression as a double and truncates to int; `scale` treats a resulting 0 as "keep the
+            // input dimension" -- so any region smaller than blockSize on an axis silently skipped the
+            // downscale and came back unpixelated. See
+            // PixelateFilterBuilderTests.Build_RegionSmallerThanBlockSize_StillProducesNonTrivialDownscale.
+            var downscale = string.Format(inv, "scale={0}:{1}", Math.Max(1, width / blockSize), Math.Max(1, height / blockSize));
+            var upscale = string.Format(inv, "scale={0}:{1}:flags=neighbor", width, height);
+            chains.Add($"[0:v]{crop},{downscale},{upscale}[blk{i}]");
+        }
+
+        // Each block is laid over the result of the previous overlay, so every region ends up in one picture.
+        // format=auto lets overlay pick the best pixel format for what feeds it, instead of its default yuv420 --
+        // which would push the whole frame of an RGB image through 4:2:0 chroma subsampling.
+        for (var i = 0; i < regions.Count; i++)
+        {
+            var source = i == 0 ? "[0:v]" : $"[out{i - 1}]";
+            var label = i == regions.Count - 1 ? string.Empty : $"[out{i}]";
+            chains.Add(string.Format(inv, "{0}[blk{1}]overlay={2}:{3}:format=auto{4}{5}",
+                source, i, regions[i].X, regions[i].Y, enableClause, label));
+        }
+
+        // ";" separates filterchains per ffmpeg's filter-graph grammar; "," separates filters within a chain.
+        return string.Join(";", chains);
     }
 }

@@ -5,6 +5,13 @@ maintainer who publishes it.
 
 ## Unreleased
 
+- **Breaking — redaction takes regions, and can find them.** `RedactRequest` takes `Regions` (a list of
+  `RedactRegion(x, y, width, height)`) in place of `X`, `Y`, `Width` and `Height`: write
+  `Regions: [new RedactRegion(x, y, width, height)]`. Several regions are hidden in one pass. Given an `IRegionDetector`
+  (`RedactDetection`) — `ChatRegionDetector` asks any vision `IChatClient` — redaction finds what to hide in an image;
+  every found region is clipped to the picture, hidden only above the confidence bar, and returned in `Detected`,
+  `Review` (found, not hidden) or `Notes` (refused). Detection on video is not supported yet. `PulsaMedia.Cli redact`
+  takes several `--region` values and `--detect <what> --openai-key <key>`.
 - **Capability contracts.** `docs/` now holds a language-neutral contract for video composition, redaction, caption
   drafting and transcript refinement, next to the channel connector: what each takes and returns, the invariants it
   keeps, how it fails, its module and the ways to reach it. The README's design principles link each one. No package changes.

@@ -9,7 +9,7 @@ public class PixelateFilterBuilderTests
     [Fact]
     public void Build_NoTimeRange_ProducesCropScaleScaleOverlayChain()
     {
-        var filter = PixelateFilterBuilder.Build(x: 10, y: 20, width: 100, height: 50);
+        var filter = PixelateFilterBuilder.Build([new RedactRegion(10, 20, 100, 50)]);
 
         filter.Should().Contain("crop=100:50:10:20");
         filter.Should().Contain("scale=6:3"); // 100/16=6, 50/16=3 (integer division)
@@ -21,7 +21,7 @@ public class PixelateFilterBuilderTests
     [Fact]
     public void Build_WithTimeRange_GatesOverlayWithEnableBetween()
     {
-        var filter = PixelateFilterBuilder.Build(x: 10, y: 20, width: 100, height: 50, startTime: 2.5, endTime: 8);
+        var filter = PixelateFilterBuilder.Build([new RedactRegion(10, 20, 100, 50)], startTime: 2.5, endTime: 8);
 
         filter.Should().Contain("enable='between(t,2.5,8)'");
         filter.Should().Contain("overlay=10:20:format=auto:enable='between(t,2.5,8)'");
@@ -30,21 +30,21 @@ public class PixelateFilterBuilderTests
     [Fact]
     public void Build_OnlyStartTimeGiven_ThrowsArgumentException()
     {
-        var act = () => PixelateFilterBuilder.Build(x: 0, y: 0, width: 10, height: 10, startTime: 2.0);
+        var act = () => PixelateFilterBuilder.Build([new RedactRegion(0, 0, 10, 10)], startTime: 2.0);
         act.Should().Throw<ArgumentException>().WithMessage("*startTime and endTime*");
     }
 
     [Fact]
     public void Build_OnlyEndTimeGiven_ThrowsArgumentException()
     {
-        var act = () => PixelateFilterBuilder.Build(x: 0, y: 0, width: 10, height: 10, endTime: 5.0);
+        var act = () => PixelateFilterBuilder.Build([new RedactRegion(0, 0, 10, 10)], endTime: 5.0);
         act.Should().Throw<ArgumentException>().WithMessage("*startTime and endTime*");
     }
 
     [Fact]
     public void Build_CustomBlockSize_ScalesByThatFactor()
     {
-        var filter = PixelateFilterBuilder.Build(x: 0, y: 0, width: 100, height: 50, blockSize: 8);
+        var filter = PixelateFilterBuilder.Build([new RedactRegion(0, 0, 100, 50)], blockSize: 8);
 
         filter.Should().Contain("scale=12:6"); // 100/8=12, 50/8=6
     }
@@ -57,7 +57,7 @@ public class PixelateFilterBuilderTests
         // to int (0), and `scale` treats a 0 dimension as "keep the input dimension" -- so the
         // "downscale" was silently a no-op and the region came back unpixelated. The fixed code
         // floors to 1 instead, guaranteeing the downscale step always does SOMETHING.
-        var filter = PixelateFilterBuilder.Build(x: 0, y: 0, width: 10, height: 10);
+        var filter = PixelateFilterBuilder.Build([new RedactRegion(0, 0, 10, 10)]);
 
         filter.Should().Contain("scale=1:1");
     }
@@ -65,14 +65,33 @@ public class PixelateFilterBuilderTests
     [Fact]
     public void Build_NonPositiveWidthOrHeight_ThrowsArgumentException()
     {
-        var act = () => PixelateFilterBuilder.Build(x: 0, y: 0, width: 0, height: 10);
+        var act = () => PixelateFilterBuilder.Build([new RedactRegion(0, 0, 0, 10)]);
         act.Should().Throw<ArgumentException>().WithMessage("*width and height*");
     }
 
     [Fact]
     public void Build_StartTimeAtOrAfterEndTime_ThrowsArgumentException()
     {
-        var act = () => PixelateFilterBuilder.Build(x: 0, y: 0, width: 10, height: 10, startTime: 5, endTime: 2);
+        var act = () => PixelateFilterBuilder.Build([new RedactRegion(0, 0, 10, 10)], startTime: 5, endTime: 2);
         act.Should().Throw<ArgumentException>().WithMessage("*startTime must be less than endTime*");
+    }
+
+    [Fact]
+    public void Build_SeveralRegions_OverlaysEachInTurnOnTheResultOfTheLast()
+    {
+        var filter = PixelateFilterBuilder.Build([new RedactRegion(0, 0, 32, 32), new RedactRegion(64, 0, 32, 32)]);
+
+        filter.Should().Be(
+            "[0:v]crop=32:32:0:0,scale=2:2,scale=32:32:flags=neighbor[blk0];" +
+            "[0:v]crop=32:32:64:0,scale=2:2,scale=32:32:flags=neighbor[blk1];" +
+            "[0:v][blk0]overlay=0:0:format=auto[out0];" +
+            "[out0][blk1]overlay=64:0:format=auto");
+    }
+
+    [Fact]
+    public void Build_NoRegions_ThrowsArgumentException()
+    {
+        var act = () => PixelateFilterBuilder.Build([]);
+        act.Should().Throw<ArgumentException>().WithMessage("*at least one region*");
     }
 }
