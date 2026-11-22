@@ -5,6 +5,8 @@ maintainer who publishes it.
 
 ## Unreleased
 
+- **Build: no machine-specific package source.** `Directory.Build.props` no longer adds a local package folder to the
+  restore sources; packages restore from the configured NuGet sources only. No package changes.
 - **README: what Pulsa is, stated without tying it to .NET.** Pulsa is described as parts for building AI agents and AI
   services: self-contained capabilities behind a contract of tools and events, with the model, configuration,
   credentials and host policies left to the product that uses them. A capability reaches its consumer as a library, a
