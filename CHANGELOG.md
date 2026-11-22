@@ -5,6 +5,9 @@ maintainer who publishes it.
 
 ## Unreleased
 
+- **Transcription contract (draft, not implemented).** [docs/transcribe.md](docs/transcribe.md): recorded speech to a
+  transcript with speakers and times — stages (prepare, segment, recognize, diarize, refine), each after preparation a
+  port the caller fills, the invariants on timing and speakers, failures and how quality is measured. No package changes.
 - **Breaking — packages are cut by the dependency they bring.** A consumer decides whether to take on a dependency
   (ffmpeg, a service, a library), so capabilities that share one now share a package. Namespaces and types are unchanged;
   only package references move:
