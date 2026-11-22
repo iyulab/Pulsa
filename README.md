@@ -201,8 +201,9 @@ File.WriteAllText("meeting.clean.vtt", WebVtt.Write(result.Cues));
   capability the same way, through whichever of its library, CLI, file-system or MCP ways it uses.
 - **The contract sets the shape.** Each capability's contract — tools, events, inputs, results, invariants, errors —
   is written down without reference to a language, in `docs/`. Every way of reaching the capability follows it, so
-  they never drift apart. The channel connector's contract is the first one written; for the other capabilities the SDK's
-  request/result API still stands in for it.
+  they never drift apart: [video composition](docs/video-compose.md), [caption drafting](docs/caption-draft.md),
+  [redaction](docs/redact.md), [transcript refinement](docs/transcript-refine.md) and the
+  [channel connector](docs/channel-connector.md).
 - **The language fits the problem.** An implementation is written in the language that best fits what it has to
   do. The repository as a whole is not tied to one language.
 
