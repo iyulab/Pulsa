@@ -1,5 +1,6 @@
 using Microsoft.Extensions.AI;
 using OpenAI;
+using PulsaRedact;
 using PulsaVideoCompose;
 
 if (args.Length == 0)
@@ -14,6 +15,8 @@ switch (args[0])
         return await RunComposeAsync(args[1..]);
     case "draft-captions":
         return await RunDraftCaptionsAsync(args[1..]);
+    case "redact":
+        return await RunRedactAsync(args[1..]);
     default:
         PrintUsage();
         return 1;
@@ -27,6 +30,8 @@ static void PrintUsage()
                 [--aspect-ratio 16:9|9:16] [--title-image <path> --title-text <text>] [--outro-image <path> --outro-text <text>]
                 [--font <font name>] [--fonts-dir <dir>]
           PulsaMedia.Cli draft-captions --images <path...> --intro <text> --openai-key <key> [--openai-model <model>]
+          PulsaMedia.Cli redact --input <path> --output <path> --region <x>,<y>,<width>,<height>
+                [--start <seconds>] [--end <seconds>] [--ffmpeg-dir <dir>]
         """);
 }
 
@@ -86,6 +91,49 @@ static async Task<int> RunDraftCaptionsAsync(string[] args)
 
     var captions = await CaptionDrafter.DraftAsync(chatClient, new DraftCaptionsRequest(images, introText));
     foreach (var caption in captions) Console.WriteLine(caption);
+    return 0;
+}
+
+static async Task<int> RunRedactAsync(string[] args)
+{
+    var options = ParseFlags(args);
+    string? Single(string key) => options.TryGetValue(key, out var v) && v.Length > 0 ? string.Join(' ', v) : null;
+
+    var input = Single("input");
+    var output = Single("output");
+    var region = Single("region");
+    if (input is null || output is null || region is null)
+    {
+        Console.Error.WriteLine("redact needs --input, --output and --region <x>,<y>,<width>,<height>");
+        PrintUsage();
+        return 1;
+    }
+
+    var parts = region.Split(',', StringSplitOptions.TrimEntries);
+    var numbers = new int[4];
+    if (parts.Length != 4 || !parts.Select((p, i) => int.TryParse(p, System.Globalization.NumberStyles.Integer,
+            System.Globalization.CultureInfo.InvariantCulture, out numbers[i])).All(ok => ok))
+    {
+        Console.Error.WriteLine($"--region must be four whole numbers <x>,<y>,<width>,<height>, not '{region}'");
+        return 1;
+    }
+
+    double? Seconds(string key) => Single(key) is { } text
+        ? double.Parse(text, System.Globalization.CultureInfo.InvariantCulture)
+        : null;
+
+    // No --ffmpeg-dir: ffmpeg is looked up on PATH.
+    var redactor = new MediaRedactor(Single("ffmpeg-dir") ?? string.Empty);
+    var result = await redactor.RedactAsync(new RedactRequest(
+        input, output, numbers[0], numbers[1], numbers[2], numbers[3],
+        StartTime: Seconds("start"), EndTime: Seconds("end")));
+
+    if (!result.Success)
+    {
+        Console.Error.WriteLine($"redact failed: {result.Error}");
+        return 1;
+    }
+    Console.WriteLine($"Wrote {result.OutputPath}");
     return 0;
 }
 

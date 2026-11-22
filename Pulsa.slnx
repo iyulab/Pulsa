@@ -7,6 +7,7 @@
   <Project Path="src/workers/Pulsa.Media.Cli/PulsaMedia.Cli.csproj" />
   <Project Path="tests/Pulsa.Tests/Pulsa.Tests.csproj" />
   <Project Path="tests/Pulsa.Media.Tests/Pulsa.Media.Tests.csproj" />
+  <Project Path="tests/Pulsa.Media.Cli.Tests/Pulsa.Media.Cli.Tests.csproj" />
   <Project Path="tests/Pulsa.Channel.SDK.Tests/Pulsa.Channel.SDK.Tests.csproj" />
   <Project Path="tests/Pulsa.Channel.Telegram.Tests/Pulsa.Channel.Telegram.Tests.csproj" />
   <Project Path="tests/Pulsa.Channel.Cli.Tests/Pulsa.Channel.Cli.Tests.csproj" />
