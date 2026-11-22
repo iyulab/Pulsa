@@ -2,8 +2,8 @@
 
 Pulls the fields a schema names out of a text, and proves each value against the text: every value it returns comes
 with the place in the text it was read from, and a value the text does not support is refused with the reason instead
-of returned. The model reads the text; Pulsa owns the proof. Status: **draft** — verification is implemented in `Pulsa`;
-extraction with a model and the CLI are not yet. This contract may change before the first release.
+of returned. The model reads the text; Pulsa owns the proof. Status: **draft** — verification and extraction with a model are
+implemented in `Pulsa`; the CLI is not yet. This contract may change before the first release.
 
 - **Module**: `Pulsa`, which brings no dependency beyond the model the caller supplies.
 - **Ways in**: library (`Extractor.ExtractAsync` · `Extractor.Verify`), CLI (planned).
