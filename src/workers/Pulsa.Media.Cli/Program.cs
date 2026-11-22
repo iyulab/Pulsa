@@ -1,4 +1,3 @@
-// plugins/pulsa/src/workers/Pulsa.VideoCompose.Cli/Program.cs
 using Microsoft.Extensions.AI;
 using OpenAI;
 using PulsaVideoCompose;
@@ -24,10 +23,10 @@ static void PrintUsage()
 {
     Console.Error.WriteLine("""
         Usage:
-          PulsaVideoCompose.Cli compose --images <path...> --captions <text...> --scene-duration <seconds> --output <path> --ffmpeg-dir <dir>
+          PulsaMedia.Cli compose --images <path...> --captions <text...> --scene-duration <seconds> --output <path> --ffmpeg-dir <dir>
                 [--aspect-ratio 16:9|9:16] [--title-image <path> --title-text <text>] [--outro-image <path> --outro-text <text>]
                 [--font <font name>] [--fonts-dir <dir>]
-          PulsaVideoCompose.Cli draft-captions --images <path...> --intro <text> --openai-key <key> [--openai-model <model>]
+          PulsaMedia.Cli draft-captions --images <path...> --intro <text> --openai-key <key> [--openai-model <model>]
         """);
 }
 
@@ -80,10 +79,8 @@ static async Task<int> RunDraftCaptionsAsync(string[] args)
     var apiKey = options["openai-key"][0];
     var model = options.TryGetValue("openai-model", out var m) ? m[0] : "gpt-4o-mini";
 
-    // Pulsa's own standalone execution part supplies its own concrete IChatClient — this is the
-    // ONE place in the whole Pulsa repo allowed to know about a concrete provider/credential;
-    // CaptionDrafter itself (SDK) never does. Not a revived Pulsa.LLM.SDK.ChatClientFactory
-    // (archived in Task 1) — deliberately small and scoped to only this CLI's own needs.
+    // The command line is a host, so it is the one place that picks a concrete chat client and
+    // takes its credential; CaptionDrafter itself only receives an IChatClient.
     var openAiClient = new OpenAIClient(new System.ClientModel.ApiKeyCredential(apiKey));
     IChatClient chatClient = openAiClient.GetChatClient(model).AsIChatClient();
 

@@ -3,7 +3,7 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <Version>0.1.0</Version>
-    <Description>Standalone CLI for PulsaVideoCompose.SDK — Pulsa's own execution part, independent of any host.</Description>
+    <Description>Command line for Pulsa's ffmpeg module (PulsaMedia): run its capabilities without a consuming application.</Description>
   </PropertyGroup>
 
   <ItemGroup>
