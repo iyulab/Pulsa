@@ -11,9 +11,10 @@ Pulsa is a set of components *for* AI: what uses them is an agent or an AI servi
 own and put behind a contract. It carries its own dependencies, is tested and versioned on its own,
 and can run in its own process. The model, the configuration, the credentials and the host's policies stay with the
 product that uses it. Most capabilities pair a model the caller supplies with the processing that makes it useful for
-one kind of work: parsing, validation, media handling, and the guarantees a model alone cannot give. A capability can
-also be the processing alone: the redaction package takes no model, because what an agent needs there is the
-processing itself, which it should not build into its core.
+one kind of work: parsing, validation, media handling, and the guarantees a model alone cannot give. Every capability
+has a role for a model. Either the model is required, or the capability runs deterministically without one and does
+more when it is handed one. Redaction, for example, hides the region it is told today; given a vision model it is to
+find what to hide.
 
 A capability is defined by its contract, not by a programming language or by one way of calling it. What it has to do
 is perform the part a consuming application needs, reliably. It reaches that application in whichever way suits it;
@@ -51,6 +52,8 @@ core. A capability belongs here when:
 - **It can be handed over as a contract.** Its inputs, results and invariants can be written down without reference
   to a language, and an agent could use that contract as a tool. It does not have to ship an MCP server: a capability
   offers the ways its consumers need.
+- **It has a role for a model.** Handed an LLM, a vision model or another model handler, the capability can do more
+  than it does without one. A capability with nothing for a model to do, however useful, is not admitted.
 
 A single prompt or a single call is not a capability and stays in the application. A capability whose value comes
 from one application's domain stays in that application's own plugin. Who accepts a new capability, and on what

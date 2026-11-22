@@ -13,7 +13,9 @@ maintainer who publishes it.
   contract sets its shape, and each implementation is written in the language that fits the problem.
   The third admission condition now reads "it can be handed over as a contract" instead of "it reaches an agent as tools
   or events". CONTRIBUTING describes how a capability built before it has a consumer is verified (by another editing
-  project, through its CLI) and published (as a prerelease until its first consumer). The package table and repository layout now list the channel connector packages (not yet
+  project, through its CLI) and published (as a prerelease until its first consumer).
+  A fourth admission condition: every capability has a role for a model — required, or extending what it does when a
+  model handler is given. The README no longer describes redaction as processing that takes no model. The package table and repository layout now list the channel connector packages (not yet
   published). No package changes.
 - **Channel connector (design, new packages — not yet published).** A one-to-one messaging channel behind one contract:
   `PulsaChannel.SDK` (contract, in-memory fake provider, ordered event queue with a read cursor, credential redaction) and

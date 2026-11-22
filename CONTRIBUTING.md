@@ -3,7 +3,7 @@
 ## Whether a capability belongs here
 
 No single maintainer decides. At least one editing project other than the proposer checks the proposal against the
-charter in the [README](README.md#what-belongs-in-pulsa) and the three conditions below; with no objection, it is admitted.
+charter in the [README](README.md#what-belongs-in-pulsa) and the four conditions below; with no objection, it is admitted.
 The proposer does not wait for that: the capability is built on a topic branch (see below), and the check is one item of
 the gate that merges it.
 
@@ -12,8 +12,10 @@ the gate that merges it.
    (a native tool, a model format, a heavy library, a licence, a native runtime)?
 3. **Can be handed over as a contract.** Its inputs, results, invariants and failures, written without reference to a
    language, and the ways it will reach consumers (library, CLI, file system, MCP).
+4. **Has a role for a model.** What a model handler (an LLM, a vision model, a speech model) adds: either the capability
+   needs one, or it runs without one and does more with it. Say which, and what grows.
 
-Not admitted: a single prompt or a single call; a capability whose value comes from one application's domain (that
+Not admitted: a capability with no role for a model; a single prompt or a single call; a capability whose value comes from one application's domain (that
 stays in the application's own plugin).
 
 A proposal is a description of the capability and of what it needs, never of the application that asked for it.
