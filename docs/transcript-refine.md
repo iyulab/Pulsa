@@ -6,7 +6,7 @@ cannot add, drop, rephrase or move anything. Status: pre-1.0.
 - **Module**: `Pulsa`, which brings no dependency beyond the chat model the caller supplies.
 - **Ways in**: library only — `TranscriptRefiner.RefineAsync`, with `WebVtt.Parse`, `WebVtt.Write` and
   `Glossary.FromMarkdown`. There is no CLI yet.
-- **Model**: the caller's (`IChatClient` in .NET). The capability never creates a client or holds a credential.
+- **Model**: required — the caller's (`IChatClient` in .NET). The capability never creates a client or holds a credential.
 
 ## Input
 

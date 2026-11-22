@@ -7,7 +7,8 @@ it. Status: pre-1.0 — names and shapes may change in a minor version.
 - **Module**: `PulsaMedia`, which brings ffmpeg. The caller names the folder that holds the `ffmpeg` binary; otherwise it
   is found on `PATH`.
 - **Ways in**: library (`FfmpegVideoComposer.ComposeAsync`), CLI (`PulsaMedia.Cli compose`).
-- **Model**: none. Drafting the captions with a model is a separate capability — [caption-draft.md](caption-draft.md).
+- **Model**: an extending role. Composition itself needs no model; given a chat model, the captions can be drafted
+  first — [caption-draft.md](caption-draft.md), a capability of its own because it needs no ffmpeg.
 
 ## Input
 

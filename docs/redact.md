@@ -5,8 +5,10 @@ Status: pre-1.0 — names and shapes may change in a minor version.
 
 - **Module**: `PulsaMedia`, which brings ffmpeg. The caller names its folder, or it is found on `PATH`.
 - **Ways in**: library (`MediaRedactor.RedactAsync`), CLI (`PulsaMedia.Cli redact`).
-- **Model**: none. Finding *what* to redact (a face, a licence plate, a name) is the caller's job. This capability makes
-  the region it is given unreadable and changes nothing else.
+- **Model**: an extending role, not built yet. Today the caller says where to redact, and the capability makes that
+  region unreadable and changes nothing else. Given a vision or detection model, it is to find what to redact (a face, a
+  licence plate, a name on screen); a detected region will be checked by the code, and a doubtful one returned for
+  review instead of hidden.
 
 ## Input
 

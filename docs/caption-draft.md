@@ -5,7 +5,7 @@ Drafts one short on-screen caption per scene from a few lines that describe what
 - **Module**: `Pulsa`, which brings no dependency beyond the chat model the caller supplies.
 - **Ways in**: library (`CaptionDrafter.DraftAsync`), CLI (`PulsaMedia.Cli draft-captions`). The CLI is a host, so it
   picks a concrete chat client itself.
-- **Model**: the caller's (`IChatClient` in .NET). The capability never creates a client, reads configuration or holds
+- **Model**: required — the caller's (`IChatClient` in .NET). The capability never creates a client, reads configuration or holds
   a credential.
 
 ## Input
