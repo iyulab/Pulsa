@@ -4,20 +4,28 @@
 [![NuGet Publish](https://github.com/iyulab/Pulsa/actions/workflows/nuget-publish.yml/badge.svg)](https://github.com/iyulab/Pulsa/actions/workflows/nuget-publish.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**Reusable capabilities for AI agents and applications — the parts they need but should not build into their core.**
+**Parts for building AI agents and AI services — each one a self-contained capability that a product needs but should
+not build into its own core.**
 
-Pulsa is a set of capabilities, each packaged so that more than one product can use it. Most pair an AI model, which
-Pulsa takes as an interface (a `Microsoft.Extensions.AI` `IChatClient` the caller supplies), with the processing that
-makes it useful for one kind of work: parsing, validation, media handling, and the guarantees a model alone cannot give.
-A capability can also be the processing alone: the redaction package takes no model, because what an agent needs there
-is the processing itself, which it should not build into its core. A capability is reached across a process boundary or
-through a library, and the language an implementation is written in is not part of the contract (every package today
-is .NET):
+Pulsa is a set of components *for* AI: what uses them is an agent or an AI service. Each capability is split off on its
+own and put behind a contract of tools and events. It carries its own dependencies, is tested and versioned on its own,
+and can run in its own process. The model, the configuration, the credentials and the host's policies stay with the
+product that uses it. Most capabilities pair a model the caller supplies with the processing that makes it useful for
+one kind of work: parsing, validation, media handling, and the guarantees a model alone cannot give. A capability can
+also be the processing alone: the redaction package takes no model, because what an agent needs there is the
+processing itself, which it should not build into its core.
+
+A capability is defined by its contract, not by a programming language. It is reached across a process boundary or
+through a library:
 
 - **CLI**: a standalone executable for scripts, and for hosts that run the capability in its own process.
-- **MCP server**: the same capability as tools and events for an agent. None ships yet; it is the surface a
-  language-neutral Pulsa is built around.
-- **SDK**: a per-language library binding with a request/result API. Every package today ships a NuGet SDK.
+- **MCP server**: the same capability as tools and events for an agent. The channel connector has one (not yet
+  published); it is the surface a language-neutral Pulsa is built around.
+- **SDK**: a per-language library binding with a request/result API.
+
+Every implementation and binding today is .NET, published to NuGet. That is a current fact, not a rule: a capability
+can be written in another language, and its builds, versions and publishing then follow that language's own
+conventions.
 
 A Pulsa package is not an AI product on its own. It is a component: something a product assembles into its own
 workflow.
@@ -47,8 +55,11 @@ evidence, is in [CONTRIBUTING.md](CONTRIBUTING.md).
 | `PulsaVideoCompose.SDK` | Compose images and captions into a captioned, Ken Burns–animated video (ffmpeg), with optional AI caption drafting | SDK · CLI | [![NuGet](https://img.shields.io/nuget/v/PulsaVideoCompose.SDK.svg)](https://www.nuget.org/packages/PulsaVideoCompose.SDK) |
 | `PulsaRedact.SDK` | Pixelate a rectangular region of an image or a time range of a video (ffmpeg) | SDK | [![NuGet](https://img.shields.io/nuget/v/PulsaRedact.SDK.svg)](https://www.nuget.org/packages/PulsaRedact.SDK) |
 | `PulsaTranscript.SDK` | Refine a speech-to-text transcript (WebVTT) with a chat model, behind a sound-alike acceptance gate | SDK | [![NuGet](https://img.shields.io/nuget/v/PulsaTranscript.SDK.svg)](https://www.nuget.org/packages/PulsaTranscript.SDK) |
+| `PulsaChannel.SDK` | One-to-one messaging channel contract, in-memory fake provider, ordered event queue ([contract](docs/channel-connector.md)) | SDK | not yet published |
+| `PulsaChannel.Telegram` | Telegram provider for the channel contract (Bot API over HTTPS) | SDK | not yet published |
+| `PulsaChannel.Cli` | The channel connector as an executable: an MCP server (`serve`) and `send` · `status` · `listen` | MCP · CLI | not yet published |
 
-All packages target .NET 10. Pulsa is pre-1.0: minor versions may change the public surface.
+The .NET packages target .NET 10. Pulsa is pre-1.0: minor versions may change the public surface.
 
 ## Installation
 
@@ -165,30 +176,41 @@ File.WriteAllText("meeting.clean.vtt", WebVtt.Write(result.Cues));
 
 ## Design principles
 
-- **One feature per package.** Each package does one job and can be adopted on its own, with only the
-  dependencies that job needs.
-- **The caller owns the model.** AI steps take an injected `IChatClient`; no package creates clients,
-  reads configuration, or stores credentials.
+- **One capability per package.** Each capability does one job and can be adopted on its own, with only the
+  dependencies that job needs. Several bindings of one capability are still one capability.
+- **The caller owns the model.** A capability that uses a model takes it from the caller — in the .NET binding, an
+  injected `IChatClient`. No package creates clients, reads configuration, or stores credentials.
 - **Code holds the invariants.** Model output is parsed and validated deterministically — counts, timings,
-  and structure are guaranteed by the library, not requested in a prompt.
-- **Host-agnostic.** No package knows about the application using it — any .NET host takes them the same
-  way, whether it calls the SDK directly, runs the CLI, or connects to the MCP server.
-- **The same shape everywhere.** Each feature has a request/result API in its SDK. The CLI and MCP surfaces
-  wrap that API, so the three never drift apart.
+  and structure are guaranteed by the implementation, not requested in a prompt, and the contract states them.
+- **Host-agnostic.** No package knows about the application using it. A host written in any language takes a
+  capability the same way: through its CLI or MCP server, or through a binding in its own language.
+- **The contract sets the shape.** Each capability's contract — tools, events, inputs, results, invariants, errors —
+  is written down without reference to a language, in `docs/`. SDKs, CLIs and MCP servers follow it, so they never
+  drift apart. The channel connector's contract is the first one written; for the other capabilities the SDK's
+  request/result API still stands in for it.
+- **The language fits the capability.** An implementation is written in the language whose ecosystem best serves
+  what it depends on. The repository as a whole is not tied to one language.
 
 ## Repository layout
 
 ```
+docs/                                # Language-neutral capability contracts
 src/
-├── core/Pulsa/                      # Shared base layer
+├── core/Pulsa/                      # Shared base layer of the .NET SDKs
 ├── sdk/
+│   ├── Pulsa.Channel.SDK/           # PulsaChannel.SDK
+│   ├── Pulsa.Channel.Telegram/      # PulsaChannel.Telegram
 │   ├── Pulsa.Redact.SDK/            # PulsaRedact.SDK
 │   ├── Pulsa.Transcript.SDK/        # PulsaTranscript.SDK
 │   └── Pulsa.VideoCompose.SDK/      # PulsaVideoCompose.SDK
 └── workers/
+    ├── Pulsa.Channel.Cli/           # PulsaChannel.Cli
     └── Pulsa.VideoCompose.Cli/      # PulsaVideoCompose.Cli
-tests/                               # xUnit test projects, one per SDK
+tests/                               # xUnit test projects
 ```
+
+Everything under `src/` and `tests/` is .NET today; the layout for a second language is decided when the first
+capability in one arrives.
 
 ## Building and testing
 
