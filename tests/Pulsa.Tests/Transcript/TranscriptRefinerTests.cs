@@ -4,7 +4,7 @@ using NSubstitute;
 using PulsaTranscript;
 using Xunit;
 
-namespace Pulsa.Transcript.SDK.Tests;
+namespace Pulsa.Tests.Transcript;
 
 public class TranscriptRefinerTests
 {
