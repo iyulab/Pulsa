@@ -5,6 +5,9 @@ maintainer who publishes it.
 
 ## Unreleased
 
+- **Channel connector moves out of Pulsa.** A messaging channel carries messages and has nothing for a model to do,
+  so it is an agent tool rather than an AI capability. `PulsaChannel.SDK`, `PulsaChannel.Telegram` and `PulsaChannel.Cli`
+  (never published) and their contract leave this repository; the entries below describe them as they stood.
 - **Channel connector (design, new packages — not yet published).** A one-to-one messaging channel behind one contract:
   `PulsaChannel.SDK` (contract, in-memory fake provider, ordered event queue with a read cursor, credential redaction) and
   `PulsaChannel.Telegram` (Telegram Bot API over plain HTTPS, no client library). The contract is in
