@@ -5,11 +5,12 @@ name: Build
 on:
   push:
     branches: ['**']
-    paths: ['src/**', 'tests/**']
+    paths: ['src/**', 'tests/**', 'Directory.Build.props', 'Directory.Packages.props', 'Pulsa.slnx', 'global.json', '.github/workflows/build.yml']
   pull_request:
     branches: [main]
-    paths: ['src/**', 'tests/**']
+    paths: ['src/**', 'tests/**', 'Directory.Build.props', 'Directory.Packages.props', 'Pulsa.slnx', 'global.json', '.github/workflows/build.yml']
   workflow_dispatch:
+# The paths are what the build reads: the sources and tests, and the shared build settings at the repository root.
 
 # A branch that is pushed again, or that also has a pull request, builds once.
 concurrency:
