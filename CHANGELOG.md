@@ -21,6 +21,20 @@ maintainer who publishes it.
 
   Replace all of the retired packages in the same step. A retired package kept beside `Pulsa` or `PulsaMedia` defines the
   same types a second time, and using one of them fails to compile (CS0433). `PulsaMedia` no longer depends on `Pulsa`.
+  The README's package table, installation, usage headings and repository layout follow the new packages, and its
+  design principle reads "packages follow dependencies; capabilities stay separate".
+- **README: what Pulsa is, stated without tying it to .NET.** Pulsa is described as parts for building AI agents and AI
+  services: self-contained capabilities behind a contract of tools and events, with the model, configuration,
+  credentials and host policies left to the product that uses them. A capability reaches its consumer as a library, a
+  CLI, asynchronously through the file system, or as an MCP server — whichever its consumers need — and reliability is
+  stated as what it must deliver. The design principles no longer assume a .NET host: a capability's language-neutral
+  contract sets its shape, and each implementation is written in the language that fits the problem.
+  The third admission condition now reads "it can be handed over as a contract" instead of "it reaches an agent as tools
+  or events". CONTRIBUTING describes how a capability built before it has a consumer is verified (by another editing
+  project, through its CLI) and published (as a prerelease until its first consumer).
+  A fourth admission condition: every capability has a role for a model — required, or extending what it does when a
+  model handler is given. The README no longer describes redaction as processing that takes no model. The package table and repository layout now list the channel connector packages (not yet
+  published). No package changes.
 - **Channel connector (design, new packages — not yet published).** A one-to-one messaging channel behind one contract:
   `PulsaChannel.SDK` (contract, in-memory fake provider, ordered event queue with a read cursor, credential redaction) and
   `PulsaChannel.Telegram` (Telegram Bot API over plain HTTPS, no client library). The contract is in
