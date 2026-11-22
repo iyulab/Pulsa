@@ -49,4 +49,46 @@ public class PcmAudioTests
 
         act.Should().Throw<ArgumentException>();
     }
+
+    [Fact]
+    public void ADataChunkThatClaimsMoreThanTheStreamHolds_ReadsOnlyWhatIsThere()
+    {
+        var bytes = WavBytes(Audio.Of(Audio.Tone(0.1)));
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(40), uint.MaxValue);
+
+        var read = PcmAudio.ReadTranscriptionWav(new MemoryStream(bytes));
+
+        read.Samples.Length.Should().Be(1600);
+    }
+
+    [Fact]
+    public void AnUnknownChunkThatClaimsMoreThanTheStreamHolds_IsRefused()
+    {
+        var bytes = WavBytes(Audio.Of(Audio.Tone(0.1)));
+        // Rename the fmt chunk so the reader skips it as unknown, with a size past the end.
+        "junk"u8.CopyTo(bytes.AsSpan(12));
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(16), uint.MaxValue - 1);
+
+        var act = () => PcmAudio.ReadTranscriptionWav(new MemoryStream(bytes));
+
+        act.Should().Throw<InvalidDataException>();
+    }
+
+    [Fact]
+    public void AFormatChunkWithAnImpossibleSize_IsRefused()
+    {
+        var bytes = WavBytes(Audio.Of(Audio.Tone(0.1)));
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(16), 8);
+
+        var act = () => PcmAudio.ReadTranscriptionWav(new MemoryStream(bytes));
+
+        act.Should().Throw<InvalidDataException>().WithMessage("*format chunk*");
+    }
+
+    private static byte[] WavBytes(PcmAudio audio)
+    {
+        using var stream = new MemoryStream();
+        audio.WriteWav(stream);
+        return stream.ToArray();
+    }
 }

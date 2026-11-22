@@ -56,8 +56,9 @@ public sealed class PcmAudio
     }
 
     /// <summary>
-    /// Reads a WAV file that is already 16 kHz mono 16-bit PCM. Anything else is refused with
-    /// <see cref="InvalidDataException"/> — converting other audio is the preparation stage's work.
+    /// Reads a WAV file that is already 16 kHz mono 16-bit PCM. Anything else — including a malformed header — is refused
+    /// with <see cref="InvalidDataException"/>; converting other audio is the preparation stage's work. Chunk sizes are
+    /// never trusted for allocation: unknown chunks are skipped, and the samples read are at most what the stream holds.
     /// </summary>
     public static PcmAudio ReadTranscriptionWav(Stream source)
     {
@@ -74,16 +75,17 @@ public sealed class PcmAudio
             while (true)
             {
                 var id = new string(reader.ReadChars(4));
-                var size = reader.ReadInt32();
+                var size = reader.ReadUInt32();
                 if (id == "fmt ")
                 {
+                    if (size < 16 || size > 1024) throw NotTranscriptionWav($"its format chunk is {size} bytes");
                     format = reader.ReadInt16();
                     channels = reader.ReadInt16();
                     rate = reader.ReadInt32();
                     reader.ReadInt32();
                     reader.ReadInt16();
                     bits = reader.ReadInt16();
-                    reader.ReadBytes(size - 16 + (size & 1));
+                    Skip(source, size - 16 + (size & 1));
                 }
                 else if (id == "data")
                 {
@@ -91,21 +93,54 @@ public sealed class PcmAudio
                         throw NotTranscriptionWav(
                             $"it is format {format?.ToString() ?? "?"}, {channels?.ToString() ?? "?"} channel(s), " +
                             $"{bits?.ToString() ?? "?"} bit, {rate?.ToString() ?? "?"} Hz");
-                    var bytes = reader.ReadBytes(size);
-                    var samples = new short[bytes.Length / 2];
-                    for (var i = 0; i < samples.Length; i++)
-                        samples[i] = BinaryPrimitives.ReadInt16LittleEndian(bytes.AsSpan(i * 2));
-                    return new PcmAudio(TranscriptionSampleRate, samples);
+                    // A streamed WAV may carry a placeholder size; the samples are what the stream actually holds.
+                    return new PcmAudio(TranscriptionSampleRate, ReadSamples(source, size));
                 }
                 else
                 {
-                    reader.ReadBytes(size + (size & 1));
+                    Skip(source, size + (size & 1));
                 }
             }
         }
         catch (EndOfStreamException)
         {
             throw NotTranscriptionWav("it ends before its audio data");
+        }
+    }
+
+    private static short[] ReadSamples(Stream source, uint declaredBytes)
+    {
+        var samples = new List<short>(source.CanSeek
+            ? (int)Math.Min(declaredBytes, Math.Max(0, source.Length - source.Position)) / 2
+            : 0);
+        var buffer = new byte[64 * 1024];
+        long remaining = declaredBytes;
+        while (remaining >= 2)
+        {
+            var read = source.ReadAtLeast(buffer.AsSpan(0, (int)Math.Min(buffer.Length, remaining & ~1L)), 2, throwOnEndOfStream: false);
+            if (read < 2) break;
+            read &= ~1;
+            for (var i = 0; i < read; i += 2)
+                samples.Add(BinaryPrimitives.ReadInt16LittleEndian(buffer.AsSpan(i)));
+            remaining -= read;
+        }
+        return [.. samples];
+    }
+
+    private static void Skip(Stream source, long bytes)
+    {
+        if (source.CanSeek)
+        {
+            if (bytes > source.Length - source.Position) throw new EndOfStreamException();
+            source.Seek(bytes, SeekOrigin.Current);
+            return;
+        }
+        var buffer = new byte[8 * 1024];
+        while (bytes > 0)
+        {
+            var read = source.Read(buffer, 0, (int)Math.Min(buffer.Length, bytes));
+            if (read == 0) throw new EndOfStreamException();
+            bytes -= read;
         }
     }
 
