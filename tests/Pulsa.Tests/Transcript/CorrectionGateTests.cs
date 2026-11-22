@@ -2,7 +2,7 @@ using AwesomeAssertions;
 using PulsaTranscript;
 using Xunit;
 
-namespace Pulsa.Transcript.SDK.Tests;
+namespace Pulsa.Tests.Transcript;
 
 /// <summary>
 /// The gate a proposed correction must pass: every changed stretch has to sound like what it replaces.

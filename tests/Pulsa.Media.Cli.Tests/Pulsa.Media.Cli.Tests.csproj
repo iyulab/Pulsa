@@ -14,7 +14,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\sdk\Pulsa.Redact.SDK\PulsaRedact.SDK.csproj" />
+    <ProjectReference Include="..\..\src\workers\Pulsa.Media.Cli\PulsaMedia.Cli.csproj" />
   </ItemGroup>
 
 </Project>
