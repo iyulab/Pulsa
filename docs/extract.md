@@ -2,8 +2,8 @@
 
 Pulls the fields a schema names out of a text, and proves each value against the text: every value it returns comes
 with the place in the text it was read from, and a value the text does not support is refused with the reason instead
-of returned. The model reads the text; Pulsa owns the proof. Status: **draft** — nothing is implemented yet, and this
-contract may change before the first release.
+of returned. The model reads the text; Pulsa owns the proof. Status: **draft** — verification is implemented in `Pulsa`;
+extraction with a model and the CLI are not yet. This contract may change before the first release.
 
 - **Module**: `Pulsa`, which brings no dependency beyond the model the caller supplies.
 - **Ways in**: library (`Extractor.ExtractAsync` · `Extractor.Verify`), CLI (planned).
@@ -27,7 +27,7 @@ reach this capability. Turning a file into text is a document parser's work and 
 
 A field's `type` is one of `string`, `number`, `date` (ISO 8601 calendar date), `boolean` or `enum` (then `values`
 lists the allowed values). `pattern` is a regular expression a `string` value must match in full. `description` is
-passed to the model and nowhere else.
+passed to the model and nowhere else. A pattern that cannot decide within one second does not accept the value.
 
 ## Result
 
