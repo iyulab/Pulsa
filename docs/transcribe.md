@@ -6,8 +6,9 @@ the words — and guarantees the result's timing and structure whichever models 
 nothing is implemented yet, and this contract may change before the first release.
 
 - **Module**: the facade (options, stage composition, invariant checks) is in `Pulsa`, which brings no dependency
-  beyond the models the caller supplies. Audio preparation is in `PulsaMedia`, which brings ffmpeg. A stage that needs
-  another dependency gets its own module. Turning an option on means taking on that stage's module.
+  beyond the models the caller supplies. Every stage is a port, so `Pulsa` references no stage module: audio
+  preparation is implemented in `PulsaMedia`, which brings ffmpeg, and a stage that needs another dependency gets its
+  own module. Turning an option on means taking on that stage's module.
 - **Ways in**: library (`Transcriber.TranscribeAsync`), CLI (`PulsaMedia.Cli transcribe`). The CLI is a host: it chooses
   the recognition model from its own flags.
 - **Model**: required — recognition is a speech-to-text model the caller supplies (`ISpeechToTextClient` in .NET).
@@ -17,11 +18,11 @@ nothing is implemented yet, and this contract may change before the first releas
 
 ## Stages
 
-Each stage after preparation is a port: the caller hands in an implementation, or the stage does not run.
+Each stage is a port: the caller hands in an implementation, or the stage does not run.
 
 | Stage | Without it | Port (in .NET) | Module |
 |---|---|---|---|
-| prepare — decode, mono, resample, loudness, optional noise reduction | required | — | `PulsaMedia` (ffmpeg) |
+| prepare — decode, mono, resample, loudness, optional noise reduction | the audio must already be 16 kHz mono PCM WAV | audio preparer: any audio → 16 kHz mono PCM, with the map back to the input's timeline | `PulsaMedia` (ffmpeg) implements it |
 | segment — find where speech is | silence detection on the prepared audio | voice-activity detector: audio → speech spans | `Pulsa`; a model adapter in its own module |
 | recognize — speech to text, per segment | required | `ISpeechToTextClient` | caller's model |
 | diarize — who spoke when | no speakers | diarizer: audio → speaker turns `{ start, end, speaker }` | caller's model, in its own module |
@@ -33,7 +34,7 @@ Each stage after preparation is a port: the caller hands in an implementation, o
 |---|---|
 | audio | a file path or a stream in any format ffmpeg reads; at least one audio channel |
 | language | optional language hint passed to recognition (BCP 47); none lets the model detect it |
-| prepare | `noiseReduction` (off by default), loudness normalization (on by default) |
+| prepare | given a preparer: `noiseReduction` (off by default), loudness normalization (on by default) |
 | segment | maximum segment length in seconds (default 30); minimum silence that splits two segments (default 0.5) |
 | diarize | given a diarizer: optional expected number of speakers, or a minimum and maximum |
 | refine | given a chat client: a glossary and the refinement gate, as in transcript refinement |
@@ -68,7 +69,8 @@ Each stage after preparation is a port: the caller hands in an implementation, o
 Checked before any audio is processed, and refused with an exception:
 
 - an option that needs a stage nobody supplied (a speaker count without a diarizer, a glossary without a chat client);
-- an audio file that does not exist, or that ffmpeg cannot read as audio.
+- an audio file that does not exist, or that the preparer cannot read as audio — without a preparer, audio that is
+  not 16 kHz mono PCM WAV.
 
 During the run, errors from a port are passed through and end the whole call: no partial transcript is returned.
 Cancellation also ends the call. A segment the recognizer returns no text for is dropped and named in `warnings`.
