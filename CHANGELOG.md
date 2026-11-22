@@ -5,6 +5,9 @@ maintainer who publishes it.
 
 ## Unreleased
 
+- **Capability contracts.** `docs/` now holds a language-neutral contract for video composition, redaction, caption
+  drafting and transcript refinement, next to the channel connector: what each takes and returns, the invariants it
+  keeps, how it fails, its module and the ways to reach it. No package changes.
 - **Breaking — packages are cut by the dependency they bring.** A consumer decides whether to take on a dependency
   (ffmpeg, a service, a library), so capabilities that share one now share a package. Namespaces and types are unchanged;
   only package references move:
