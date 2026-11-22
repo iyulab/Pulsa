@@ -2,7 +2,7 @@ using AwesomeAssertions;
 using PulsaTranscript;
 using Xunit;
 
-namespace Pulsa.Transcript.SDK.Tests;
+namespace Pulsa.Tests.Transcript;
 
 public class WebVttTests
 {

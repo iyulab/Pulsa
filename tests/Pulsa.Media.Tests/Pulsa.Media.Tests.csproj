@@ -11,10 +11,11 @@
     <PackageReference Include="xunit.runner.visualstudio" />
     <PackageReference Include="AwesomeAssertions" />
     <PackageReference Include="NSubstitute" />
+    <PackageReference Include="FFMpegCore" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\sdk\Pulsa.VideoCompose.SDK\PulsaVideoCompose.SDK.csproj" />
+    <ProjectReference Include="..\..\src\sdk\Pulsa.Media\PulsaMedia.csproj" />
   </ItemGroup>
 
 </Project>

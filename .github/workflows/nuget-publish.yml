@@ -5,9 +5,6 @@ on:
     branches: [main]
     paths:
       - 'src/core/Pulsa/Pulsa.csproj'
-      - 'src/sdk/Pulsa.VideoCompose.SDK/PulsaVideoCompose.SDK.csproj'
-      - 'src/sdk/Pulsa.Redact.SDK/PulsaRedact.SDK.csproj'
-      - 'src/sdk/Pulsa.Transcript.SDK/PulsaTranscript.SDK.csproj'
   workflow_dispatch:
 
 jobs:
@@ -15,9 +12,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       pulsa: ${{ steps.pulsa.outputs.publish }}
-      video-compose-sdk: ${{ steps.video-compose-sdk.outputs.publish }}
-      redact-sdk: ${{ steps.redact-sdk.outputs.publish }}
-      transcript-sdk: ${{ steps.transcript-sdk.outputs.publish }}
     steps:
       # The whole history: a push can carry several commits, and a version change in any of them
       # counts. Reading only the last commit (HEAD~1..HEAD) missed a version bump that was not the
@@ -51,55 +45,14 @@ jobs:
             echo "publish=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Check PulsaVideoCompose.SDK
-        id: video-compose-sdk
-        shell: bash
-        run: |
-          csproj="src/sdk/Pulsa.VideoCompose.SDK/PulsaVideoCompose.SDK.csproj"
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ] || grep -qxF "$csproj" "$RUNNER_TEMP/changed.txt"; then
-            version=$(sed -n 's/.*<Version>\([^<]*\)<.*/\1/p' "$csproj")
-            echo "publish=true" >> $GITHUB_OUTPUT
-            echo "version=${version}" >> $GITHUB_OUTPUT
-          else
-            echo "publish=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Check PulsaRedact.SDK
-        id: redact-sdk
-        shell: bash
-        run: |
-          csproj="src/sdk/Pulsa.Redact.SDK/PulsaRedact.SDK.csproj"
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ] || grep -qxF "$csproj" "$RUNNER_TEMP/changed.txt"; then
-            version=$(sed -n 's/.*<Version>\([^<]*\)<.*/\1/p' "$csproj")
-            echo "publish=true" >> $GITHUB_OUTPUT
-            echo "version=${version}" >> $GITHUB_OUTPUT
-          else
-            echo "publish=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Check PulsaTranscript.SDK
-        id: transcript-sdk
-        shell: bash
-        run: |
-          csproj="src/sdk/Pulsa.Transcript.SDK/PulsaTranscript.SDK.csproj"
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ] || grep -qxF "$csproj" "$RUNNER_TEMP/changed.txt"; then
-            version=$(sed -n 's/.*<Version>\([^<]*\)<.*/\1/p' "$csproj")
-            echo "publish=true" >> $GITHUB_OUTPUT
-            echo "version=${version}" >> $GITHUB_OUTPUT
-          else
-            echo "publish=false" >> $GITHUB_OUTPUT
-          fi
-
   # Pack every package this push changed into one artifact, and hand it to the organization's central publisher in one call: the
-  # packages land together, so an SDK (whose nuspec carries a hard dependency on Pulsa) is never on nuget.org ahead of the Pulsa
+  # packages land together, so a package whose nuspec depends on Pulsa is never on nuget.org ahead of the Pulsa
   # version it needs. CORRECTNESS PRECONDITION (2026-09-04): nuget.org's existing `Pulsa 0.1.0` (published 2026-03-19) is a
   # different, older library that shares this id and version — bump src/core/Pulsa/Pulsa.csproj's <Version> before the first real
   # publish, or the push is refused as a duplicate of a stranger.
   pack:
     needs: detect-changes
-    if: >-
-      needs.detect-changes.outputs.pulsa == 'true' || needs.detect-changes.outputs.video-compose-sdk == 'true' ||
-      needs.detect-changes.outputs.redact-sdk == 'true' || needs.detect-changes.outputs.transcript-sdk == 'true'
+    if: needs.detect-changes.outputs.pulsa == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -109,18 +62,6 @@ jobs:
       - name: Pack Pulsa
         if: needs.detect-changes.outputs.pulsa == 'true'
         run: dotnet pack src/core/Pulsa/Pulsa.csproj -c Release -o nupkgs
-
-      - name: Pack PulsaVideoCompose.SDK
-        if: needs.detect-changes.outputs.video-compose-sdk == 'true'
-        run: dotnet pack src/sdk/Pulsa.VideoCompose.SDK/PulsaVideoCompose.SDK.csproj -c Release -o nupkgs
-
-      - name: Pack PulsaRedact.SDK
-        if: needs.detect-changes.outputs.redact-sdk == 'true'
-        run: dotnet pack src/sdk/Pulsa.Redact.SDK/PulsaRedact.SDK.csproj -c Release -o nupkgs
-
-      - name: Pack PulsaTranscript.SDK
-        if: needs.detect-changes.outputs.transcript-sdk == 'true'
-        run: dotnet pack src/sdk/Pulsa.Transcript.SDK/PulsaTranscript.SDK.csproj -c Release -o nupkgs
 
       # The central publisher accepts only .nupkg / .snupkg files in this artifact.
       - name: Upload the packages

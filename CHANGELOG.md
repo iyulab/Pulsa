@@ -5,6 +5,21 @@ maintainer who publishes it.
 
 ## Unreleased
 
+- **Breaking — packages are cut by the dependency they bring.** A consumer decides whether to take on a dependency
+  (ffmpeg, a service, a library), so capabilities that share one now share a package. Namespaces and types are unchanged;
+  only package references move:
+
+  | Before | After |
+  |---|---|
+  | `PulsaVideoCompose.SDK` | `PulsaMedia` (ffmpeg) — caption drafting moved to `Pulsa` |
+  | `PulsaRedact.SDK` | `PulsaMedia` (ffmpeg) |
+  | `PulsaTranscript.SDK` | `Pulsa` (no dependency beyond the chat model you supply) |
+  | `PulsaVideoCompose.Cli` | `PulsaMedia.Cli`, which also gains `redact` |
+
+  Replace all of the retired packages in the same step. A retired package kept beside `Pulsa` or `PulsaMedia` defines the
+  same types a second time, and using one of them fails to compile (CS0433). `PulsaMedia` no longer depends on `Pulsa`.
+  The README's package table, installation, usage headings and repository layout follow the new packages, and its
+  design principle reads "packages follow dependencies; capabilities stay separate".
 - **README: what Pulsa is, stated without tying it to .NET.** Pulsa is described as parts for building AI agents and AI
   services: self-contained capabilities behind a contract of tools and events, with the model, configuration,
   credentials and host policies left to the product that uses them. A capability reaches its consumer as a library, a

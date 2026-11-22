@@ -63,30 +63,32 @@ evidence, is in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 | Package | Description | Surfaces | NuGet |
 |---|---|---|---|
-| `Pulsa` | Shared base layer; carries `Microsoft.Extensions.AI.Abstractions` for every SDK | — | [![NuGet](https://img.shields.io/nuget/v/Pulsa.svg)](https://www.nuget.org/packages/Pulsa) |
-| `PulsaVideoCompose.SDK` | Compose images and captions into a captioned, Ken Burns–animated video (ffmpeg), with optional AI caption drafting | SDK · CLI | [![NuGet](https://img.shields.io/nuget/v/PulsaVideoCompose.SDK.svg)](https://www.nuget.org/packages/PulsaVideoCompose.SDK) |
-| `PulsaRedact.SDK` | Pixelate a rectangular region of an image or a time range of a video (ffmpeg) | SDK | [![NuGet](https://img.shields.io/nuget/v/PulsaRedact.SDK.svg)](https://www.nuget.org/packages/PulsaRedact.SDK) |
-| `PulsaTranscript.SDK` | Refine a speech-to-text transcript (WebVTT) with a chat model, behind a sound-alike acceptance gate | SDK | [![NuGet](https://img.shields.io/nuget/v/PulsaTranscript.SDK.svg)](https://www.nuget.org/packages/PulsaTranscript.SDK) |
+| `Pulsa` | Capabilities that bring no dependency beyond the chat model you supply: refine a speech-to-text transcript (WebVTT) behind a sound-alike acceptance gate, and draft on-screen captions | SDK | [![NuGet](https://img.shields.io/nuget/v/Pulsa.svg)](https://www.nuget.org/packages/Pulsa) |
+| `PulsaMedia` | Capabilities that need ffmpeg: compose images and captions into a captioned, Ken Burns–animated video, and pixelate a region of an image or a time range of a video | SDK | not yet published |
+| `PulsaMedia.Cli` | `PulsaMedia` as an executable: `compose`, `draft-captions`, `redact` | CLI | not yet published |
 | `PulsaChannel.SDK` | One-to-one messaging channel contract, in-memory fake provider, ordered event queue ([contract](docs/channel-connector.md)) | SDK | not yet published |
 | `PulsaChannel.Telegram` | Telegram provider for the channel contract (Bot API over HTTPS) | SDK | not yet published |
 | `PulsaChannel.Cli` | The channel connector as an executable: an MCP server (`serve`) and `send` · `status` · `listen` | MCP · CLI | not yet published |
+
+A package holds the capabilities that share its dependencies (see the design principles). `PulsaVideoCompose.SDK`,
+`PulsaRedact.SDK` and `PulsaTranscript.SDK` are retired: their capabilities are now in `PulsaMedia` and `Pulsa` — see
+the [changelog](CHANGELOG.md).
 
 The .NET packages target .NET 10. Pulsa is pre-1.0: minor versions may change the public surface.
 
 ## Installation
 
 ```bash
-dotnet add package PulsaVideoCompose.SDK
-dotnet add package PulsaRedact.SDK
-dotnet add package PulsaTranscript.SDK
+dotnet add package Pulsa        # transcript refinement, caption drafting
+dotnet add package PulsaMedia   # video composition, redaction (ffmpeg)
 ```
 
-The video and redaction SDKs drive [ffmpeg](https://ffmpeg.org/); pass the folder that contains the
-`ffmpeg` binary to their constructors. `PulsaTranscript.SDK` has no native dependency.
+`PulsaMedia` drives [ffmpeg](https://ffmpeg.org/); pass the folder that contains the `ffmpeg` binary to its
+constructors. `Pulsa` has no native dependency.
 
 ## Usage
 
-### Video composition — `PulsaVideoCompose.SDK`
+### Video composition — `PulsaMedia`
 
 ```csharp
 using PulsaVideoCompose;
@@ -128,17 +130,17 @@ foreach (var s in result.FontSubstitutions ?? [])   // null: the check could not
     Console.WriteLine($"{s.RequestedFamily} was not found; drawn in {s.UsedFont}");
 ```
 
-Captions can be drafted from a short description with any `IChatClient`:
+Captions can be drafted from a short description with any `IChatClient` (`CaptionDrafter`, in `Pulsa`):
 
 ```csharp
 var captions = await CaptionDrafter.DraftAsync(chatClient,
     new DraftCaptionsRequest(["scene1.png", "scene2.png", "scene3.png"], "A product demo video."));
 ```
 
-A command-line front end is included (`PulsaVideoCompose.Cli`):
+A command-line front end is included (`PulsaMedia.Cli`, which also has `draft-captions` and `redact`):
 
 ```bash
-PulsaVideoCompose.Cli compose \
+PulsaMedia.Cli compose \
   --images scene1.png scene2.png scene3.png \
   --captions "First caption" "Second caption" "Third caption" \
   --scene-duration 4 \
@@ -150,7 +152,7 @@ PulsaVideoCompose.Cli compose \
   --font "Noto Sans KR" --fonts-dir ./fonts
 ```
 
-### Redaction — `PulsaRedact.SDK`
+### Redaction — `PulsaMedia`
 
 ```csharp
 using PulsaRedact;
@@ -163,7 +165,7 @@ var result = await redactor.RedactAsync(new RedactRequest(
     StartTime: 5, EndTime: 12));             // seconds; video only — omit for the whole video or an image
 ```
 
-### Transcript refinement — `PulsaTranscript.SDK`
+### Transcript refinement — `Pulsa`
 
 ```csharp
 using PulsaTranscript;
@@ -188,8 +190,9 @@ File.WriteAllText("meeting.clean.vtt", WebVtt.Write(result.Cues));
 
 ## Design principles
 
-- **One capability per package.** Each capability does one job and can be adopted on its own, with only the
-  dependencies that job needs. Several bindings of one capability are still one capability.
+- **Packages follow dependencies; capabilities stay separate.** A package holds the capabilities that share its
+  dependencies, so a host takes on a dependency only when it uses one of them; each capability keeps its own contract
+  and can be adopted on its own. Several bindings of one capability are still one capability.
 - **The caller owns the model.** A capability that uses a model takes it from the caller — in the .NET binding, an
   injected `IChatClient`. No package creates clients, reads configuration, or stores credentials.
 - **Code holds the invariants.** Model output is parsed and validated deterministically — counts, timings,
@@ -208,16 +211,14 @@ File.WriteAllText("meeting.clean.vtt", WebVtt.Write(result.Cues));
 ```
 docs/                                # Language-neutral capability contracts
 src/
-├── core/Pulsa/                      # Shared base layer of the .NET SDKs
+├── core/Pulsa/                      # Pulsa — no dependency beyond the chat model
 ├── sdk/
 │   ├── Pulsa.Channel.SDK/           # PulsaChannel.SDK
 │   ├── Pulsa.Channel.Telegram/      # PulsaChannel.Telegram
-│   ├── Pulsa.Redact.SDK/            # PulsaRedact.SDK
-│   ├── Pulsa.Transcript.SDK/        # PulsaTranscript.SDK
-│   └── Pulsa.VideoCompose.SDK/      # PulsaVideoCompose.SDK
+│   └── Pulsa.Media/                 # PulsaMedia — ffmpeg
 └── workers/
     ├── Pulsa.Channel.Cli/           # PulsaChannel.Cli
-    └── Pulsa.VideoCompose.Cli/      # PulsaVideoCompose.Cli
+    └── Pulsa.Media.Cli/             # PulsaMedia.Cli
 tests/                               # xUnit test projects
 ```
 
