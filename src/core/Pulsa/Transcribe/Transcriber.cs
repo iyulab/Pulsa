@@ -12,6 +12,14 @@ public sealed record TranscribeRequest(string AudioPath)
     /// <summary>Language hint for recognition (BCP 47); none lets the model detect it.</summary>
     public string? Language { get; init; }
 
+    /// <summary>
+    /// The options every recognition call starts from — the model, and anything provider-specific such as a vocabulary
+    /// prompt through <see cref="SpeechToTextOptions.RawRepresentationFactory"/>. The facade copies it per call and sets
+    /// only the language (when <see cref="Language"/> is given) and the sample rate of the audio it sends.
+    /// </summary>
+    [Experimental("MEAI001", UrlFormat = "https://aka.ms/dotnet-extensions-warnings/{0}")]
+    public SpeechToTextOptions? Recognition { get; init; }
+
     /// <summary>For the preparation stage. Only read when a preparer is supplied.</summary>
     public PrepareOptions? Prepare { get; init; }
 
@@ -118,11 +126,10 @@ public static class Transcriber
             using var stream = new MemoryStream();
             prepared.Audio.Slice(segment.Start, segment.End).WriteWav(stream);
             stream.Position = 0;
-            var response = await recognizer.GetTextAsync(stream, new SpeechToTextOptions
-            {
-                SpeechLanguage = request.Language,
-                SpeechSampleRate = PcmAudio.TranscriptionSampleRate,
-            }, cancellationToken);
+            var callOptions = request.Recognition?.Clone() ?? new SpeechToTextOptions();
+            if (request.Language is not null) callOptions.SpeechLanguage = request.Language;
+            callOptions.SpeechSampleRate = PcmAudio.TranscriptionSampleRate;
+            var response = await recognizer.GetTextAsync(stream, callOptions, cancellationToken);
             recognitionModel ??= response.ModelId;
             var text = response.Text.Trim();
             if (text.Length == 0)

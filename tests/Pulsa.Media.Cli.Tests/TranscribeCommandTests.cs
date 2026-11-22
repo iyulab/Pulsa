@@ -98,11 +98,41 @@ public sealed class TranscribeCommandTests : IDisposable
         endpoint.Requests.Should().Be(0);
     }
 
+    [Fact]
+    public async Task Transcribe_WithAVocabulary_SendsItsTermsToTheRecognizer()
+    {
+        var input = await TwoTonesAsync();
+        var vocabulary = Path.Combine(_tempDir, "terms.md");
+        await File.WriteAllTextAsync(vocabulary, "- Pulsa\n- PulsaMedia\n", TestContext.Current.CancellationToken);
+        using var endpoint = new FakeTranscriptionEndpoint();
+
+        var (exitCode, _, stderr) = await RunAsync(
+            "transcribe", "--input", input, "--openai-key", "k", "--openai-endpoint", endpoint.Url, "--vocabulary", vocabulary);
+
+        exitCode.Should().Be(0, stderr);
+        endpoint.Bodies.Should().NotBeEmpty().And.OnlyContain(body => body.Contains("name=prompt") && body.Contains("Pulsa, PulsaMedia"));
+    }
+
+    [Fact]
+    public async Task Score_PrintsWordAndCharacterErrorRates()
+    {
+        var reference = Path.Combine(_tempDir, "ref.vtt");
+        var hypothesis = Path.Combine(_tempDir, "hyp.txt");
+        await File.WriteAllTextAsync(reference, "WEBVTT\n\n00:00.000 --> 00:01.000\nthe cat sat\n", TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(hypothesis, "the cat sit", TestContext.Current.CancellationToken);
+
+        var (exitCode, stdout, stderr) = await RunAsync("score", "--reference", reference, "--hypothesis", hypothesis);
+
+        exitCode.Should().Be(0, stderr);
+        stdout.Should().Contain("WER 0.3333").And.Contain("CER ");
+    }
+
     /// <summary>Answers <c>POST …/audio/transcriptions</c> with "segment N".</summary>
     private sealed class FakeTranscriptionEndpoint : IDisposable
     {
         private readonly HttpListener _listener = new();
         private int _requests;
+        public System.Collections.Concurrent.ConcurrentQueue<string> Bodies { get; } = new();
 
         public FakeTranscriptionEndpoint()
         {
@@ -125,6 +155,7 @@ public sealed class TranscribeCommandTests : IDisposable
                 catch (Exception) { return; }
                 using var drain = new MemoryStream();
                 await context.Request.InputStream.CopyToAsync(drain);
+                Bodies.Enqueue(Encoding.Latin1.GetString(drain.ToArray()));
                 var n = Interlocked.Increment(ref _requests);
                 var body = Encoding.UTF8.GetBytes($$"""{"text":"segment {{n}}"}""");
                 context.Response.ContentType = "application/json";

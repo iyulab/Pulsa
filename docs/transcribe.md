@@ -36,6 +36,7 @@ Each stage is a port: the caller hands in an implementation, or the stage does n
 |---|---|
 | audio | a file path or a stream in any format ffmpeg reads; at least one audio channel |
 | language | optional language hint passed to recognition (BCP 47); none lets the model detect it |
+| recognition | optional options every recognition call starts from — the model and anything provider-specific, such as a vocabulary prompt; the capability sets only the language and the sample rate |
 | prepare | given a preparer: `noiseReduction` (off by default), loudness normalization (on by default) |
 | segment | maximum segment length in seconds (default 30); minimum silence that splits two segments (default 0.5) |
 | diarize | given a diarizer: optional expected number of speakers, or a minimum and maximum |
@@ -82,7 +83,10 @@ Cancellation also ends the call. A segment the recognizer returns no text for is
 `PulsaMedia.Cli transcribe --input <audio or video> --openai-key <key>` always prepares with ffmpeg and segments by
 silence. Options: `--output <file.vtt>` (otherwise standard output), `--openai-model`, `--openai-endpoint` (any
 OpenAI-compatible transcription server), `--language`, `--noise-reduction`, `--no-loudness`, `--max-segment`,
-`--min-silence`, and refinement with `--glossary <file.md> --refine-model <model>` (both or neither). The exit code is 0
+`--min-silence`, `--vocabulary <file.md>` (terms sent to the recognizer as its prompt), and refinement with
+`--glossary <file.md> --refine-model <model>` (both or neither; the glossary is also the vocabulary unless one is given).
+`PulsaMedia.Cli score --reference <file> --hypothesis <file>` prints the word and character error rates of two
+transcripts (WebVTT or plain text). The exit code is 0
 with the WebVTT written; otherwise 1 with the reason on standard error. Warnings and refused corrections go to standard
 error and do not change the exit code.
 

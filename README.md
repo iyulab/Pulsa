@@ -65,7 +65,7 @@ evidence, is in [CONTRIBUTING.md](CONTRIBUTING.md).
 |---|---|---|---|
 | `Pulsa` | Capabilities that bring no dependency beyond the models you supply: transcription (draft — speech segments, speakers and refinement around your speech-to-text model), refine a speech-to-text transcript (WebVTT) behind a sound-alike acceptance gate, and draft on-screen captions | SDK | [![NuGet](https://img.shields.io/nuget/v/Pulsa.svg)](https://www.nuget.org/packages/Pulsa) |
 | `PulsaMedia` | Capabilities that need ffmpeg: compose images and captions into a captioned, Ken Burns–animated video, pixelate a region of an image or a time range of a video, and prepare any audio for transcription | SDK | not yet published |
-| `PulsaMedia.Cli` | `PulsaMedia` as an executable: `compose`, `draft-captions`, `redact`, `transcribe` | CLI | not yet published |
+| `PulsaMedia.Cli` | `PulsaMedia` as an executable: `compose`, `draft-captions`, `redact`, `transcribe`, `score` | CLI | not yet published |
 | `PulsaChannel.SDK` | One-to-one messaging channel contract, in-memory fake provider, ordered event queue ([contract](docs/channel-connector.md)) | SDK | not yet published |
 | `PulsaChannel.Telegram` | Telegram provider for the channel contract (Bot API over HTTPS) | SDK | not yet published |
 | `PulsaChannel.Cli` | The channel connector as an executable: an MCP server (`serve`) and `send` · `status` · `listen` | MCP · CLI | not yet published |

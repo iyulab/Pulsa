@@ -31,6 +31,7 @@ internal static class Audio
 internal sealed class FakeRecognizer(params string[] texts) : ISpeechToTextClient
 {
     public List<TimeSpan> Received { get; } = [];
+    public List<SpeechToTextOptions?> Options { get; } = [];
     public Func<int, Exception?> FailOnCall { get; init; } = _ => null;
 
     public Task<SpeechToTextResponse> GetTextAsync(Stream audioSpeechStream, SpeechToTextOptions? options = null, CancellationToken cancellationToken = default)
@@ -38,6 +39,7 @@ internal sealed class FakeRecognizer(params string[] texts) : ISpeechToTextClien
         var audio = PcmAudio.ReadTranscriptionWav(audioSpeechStream);
         var call = Received.Count;
         Received.Add(audio.Duration);
+        Options.Add(options);
         if (FailOnCall(call) is { } error) throw error;
         var text = call < texts.Length ? texts[call] : $"text {call + 1}";
         return Task.FromResult(new SpeechToTextResponse(text) { ModelId = "fake-stt" });

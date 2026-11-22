@@ -217,6 +217,23 @@ public sealed class TranscriberTests : IDisposable
         result.Stages.Select(s => s.Stage).Should().Equal("segment", "recognize", "refine");
     }
 
+    [Fact]
+    public async Task RecognitionOptions_AreTheStartOfEveryCall_WithTheLanguageAndRateSet()
+    {
+        var recognizer = new FakeRecognizer();
+        var template = new SpeechToTextOptions { ModelId = "my-model", AdditionalProperties = new() { ["vocabulary"] = "Pulsa" } };
+        var stages = new TranscribeStages { VoiceActivity = new FakeDetector(R(1, 2), R(3, 4)) };
+
+        await Transcriber.TranscribeAsync(recognizer,
+            new TranscribeRequest(TenSecondsWav()) { Language = "ko", Recognition = template }, stages, Ct);
+
+        recognizer.Options.Should().HaveCount(2).And.OnlyContain(o =>
+            o!.ModelId == "my-model" && (string)o.AdditionalProperties!["vocabulary"]! == "Pulsa"
+            && o.SpeechLanguage == "ko" && o.SpeechSampleRate == 16_000);
+        recognizer.Options[0].Should().NotBeSameAs(template).And.NotBeSameAs(recognizer.Options[1]);
+        template.SpeechLanguage.Should().BeNull("the caller's template is not changed");
+    }
+
     // --- Failures during the run
 
     [Fact]

@@ -11,7 +11,10 @@ maintainer who publishes it.
   silence detection. `PulsaMedia` adds `FfmpegAudioPreparer` (any audio or video → 16 kHz mono, optional loudness
   normalization and noise reduction) and `PulsaMedia.Cli transcribe` writes WebVTT through an OpenAI or OpenAI-compatible
   transcription endpoint. Contract: `docs/transcribe.md`. Carries the `MEAI001` evaluation diagnostic.
-- `TranscriptScore`: word and character error rates between a reference and a transcript, normalized alike.
+- `TranscriptScore`: word and character error rates between a reference and a transcript, normalized alike;
+  `PulsaMedia.Cli score` prints them for two files.
+- `TranscribeRequest.Recognition`: the options every recognition call starts from (model, provider settings such as a
+  vocabulary prompt); `PulsaMedia.Cli transcribe --vocabulary` sends terms to the recognizer.
 - Reading a 16 kHz WAV never trusts a chunk size for allocation.
 - **Transcription contract (draft, not implemented).** [docs/transcribe.md](docs/transcribe.md): recorded speech to a
   transcript with speakers and times — stages (prepare, segment, recognize, diarize, refine), each after preparation a

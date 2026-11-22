@@ -1,5 +1,6 @@
 using Microsoft.Extensions.AI;
 using OpenAI;
+using OpenAI.Audio;
 using PulsaRedact;
 using PulsaTranscribe;
 using PulsaTranscript;
@@ -21,6 +22,8 @@ switch (args[0])
         return await RunRedactAsync(args[1..]);
     case "transcribe":
         return await RunTranscribeAsync(args[1..]);
+    case "score":
+        return await RunScoreAsync(args[1..]);
     default:
         PrintUsage();
         return 1;
@@ -39,7 +42,8 @@ static void PrintUsage()
           PulsaMedia.Cli transcribe --input <audio or video> --openai-key <key> [--output <file.vtt>]
                 [--openai-model <model>] [--openai-endpoint <url>] [--language <bcp47>]
                 [--noise-reduction] [--no-loudness] [--max-segment <seconds>] [--min-silence <seconds>]
-                [--glossary <file.md> --refine-model <model>] [--ffmpeg-dir <dir>]
+                [--vocabulary <file.md>] [--glossary <file.md> --refine-model <model>] [--ffmpeg-dir <dir>]
+          PulsaMedia.Cli score --reference <file.vtt|file.txt> --hypothesis <file.vtt|file.txt>
         """);
 }
 
@@ -176,9 +180,20 @@ static async Task<int> RunTranscribeAsync(string[] args)
     var openAi = new OpenAIClient(new System.ClientModel.ApiKeyCredential(apiKey), clientOptions);
     var recognizer = openAi.GetAudioClient(Single("openai-model") ?? "gpt-4o-mini-transcribe").AsISpeechToTextClient();
 
+    // Terms the recognizer is told to expect: --vocabulary, else the refinement glossary. OpenAI takes them as a prompt.
+    var vocabularyPath = Single("vocabulary") ?? glossaryPath;
+    var vocabulary = vocabularyPath is null ? null : Glossary.FromMarkdown(await File.ReadAllTextAsync(vocabularyPath)).Terms;
+    var recognition = vocabulary is { Count: > 0 }
+        ? new SpeechToTextOptions
+        {
+            RawRepresentationFactory = _ => new AudioTranscriptionOptions { Prompt = string.Join(", ", vocabulary) },
+        }
+        : null;
+
     var request = new TranscribeRequest(input)
     {
         Language = Single("language"),
+        Recognition = recognition,
         Prepare = new PrepareOptions(
             NoiseReduction: options.ContainsKey("noise-reduction"),
             NormalizeLoudness: !options.ContainsKey("no-loudness")),
@@ -219,6 +234,37 @@ static async Task<int> RunTranscribeAsync(string[] args)
     return 0;
 }
 #pragma warning restore MEAI001
+
+static async Task<int> RunScoreAsync(string[] args)
+{
+    var options = ParseFlags(args);
+    string? Single(string key) => options.TryGetValue(key, out var v) && v.Length > 0 ? string.Join(' ', v) : null;
+    var referencePath = Single("reference");
+    var hypothesisPath = Single("hypothesis");
+    if (referencePath is null || hypothesisPath is null)
+    {
+        Console.Error.WriteLine("score needs --reference and --hypothesis");
+        PrintUsage();
+        return 1;
+    }
+
+    // A .vtt file is scored by its cue text; anything else as plain text.
+    static async Task<string> ReadText(string path)
+    {
+        var content = await File.ReadAllTextAsync(path);
+        return content.TrimStart().StartsWith("WEBVTT", StringComparison.Ordinal)
+            ? TranscriptScore.Text(WebVtt.Parse(content))
+            : content;
+    }
+
+    var reference = await ReadText(referencePath);
+    var hypothesis = await ReadText(hypothesisPath);
+    static string Line(string name, ErrorRate r) => string.Create(System.Globalization.CultureInfo.InvariantCulture,
+        $"{name} {r.Rate:0.0000}  (substitutions {r.Substitutions}, deletions {r.Deletions}, insertions {r.Insertions}, reference {r.ReferenceLength})");
+    Console.WriteLine(Line("WER", TranscriptScore.WordErrorRate(reference, hypothesis)));
+    Console.WriteLine(Line("CER", TranscriptScore.CharacterErrorRate(reference, hypothesis)));
+    return 0;
+}
 
 static Dictionary<string, string[]> ParseFlags(string[] args)
 {
