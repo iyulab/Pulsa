@@ -7,7 +7,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\sdk\Pulsa.VideoCompose.SDK\PulsaVideoCompose.SDK.csproj" />
+    <ProjectReference Include="..\..\sdk\Pulsa.Media\PulsaMedia.csproj" />
+    <ProjectReference Include="..\..\core\Pulsa\Pulsa.csproj" />
   </ItemGroup>
 
   <ItemGroup>

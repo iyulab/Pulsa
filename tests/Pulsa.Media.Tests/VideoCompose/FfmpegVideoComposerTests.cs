@@ -3,7 +3,7 @@ using AwesomeAssertions;
 using PulsaVideoCompose;
 using Xunit;
 
-namespace Pulsa.VideoCompose.SDK.Tests;
+namespace Pulsa.Media.Tests.VideoCompose;
 
 public class FfmpegVideoComposerTests : IDisposable
 {

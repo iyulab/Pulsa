@@ -3,7 +3,7 @@ using AwesomeAssertions;
 using PulsaRedact;
 using Xunit;
 
-namespace Pulsa.Redact.SDK.Tests;
+namespace Pulsa.Media.Tests.Redact;
 
 public class MediaRedactorTests : IDisposable
 {

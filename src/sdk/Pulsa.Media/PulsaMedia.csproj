@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Version>0.1.0</Version>
+    <Description>Pulsa's ffmpeg module — every Pulsa capability that needs ffmpeg, in one package: compose images and captions into a captioned, Ken Burns–animated video, and pixelate a region of an image or a time range of a video. Host-agnostic.</Description>
+    <PackageTags>pulsa;ffmpeg;video;ken-burns;redact;privacy;pixelate</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="FFMpegCore" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Pulsa.Media.Tests" />
+  </ItemGroup>
+
+</Project>
