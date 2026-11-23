@@ -5,6 +5,7 @@ maintainer who publishes it.
 
 ## Unreleased
 
+- Build: the step that installs ffmpeg for the live tests retries when Chocolatey's feed answers with an error, and fails itself when there is still no ffmpeg, instead of letting the tests fail on a missing binary. No package changes.
 - **Build: no machine-specific package source.** `Directory.Build.props` no longer adds a local package folder to the
   restore sources; packages restore from the configured NuGet sources only. The build workflow now also runs when the
   shared build settings at the repository root change (`Directory.*.props`, the solution, `global.json`). No package changes.

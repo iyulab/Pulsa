@@ -28,12 +28,23 @@ jobs:
       - name: Build
         run: dotnet build Pulsa.slnx -c Release
 
-      # Pulsa.Redact.SDK.Tests' live tests need a real ffmpeg on PATH; don't rely on assumptions
+      # The live tests of PulsaMedia need a real ffmpeg on PATH; don't rely on assumptions
       # about what windows-latest ships. Chocolatey is preinstalled on GitHub's windows-latest
       # runners, so this has no extra action dependency to keep current/trusted (vs. a third-party
-      # setup-ffmpeg action).
+      # setup-ffmpeg action). Its community feed now and then answers 5xx, and `choco install` then
+      # ends "installed 0/0 packages" with a success code — so the step retries, and fails itself
+      # when there is still no ffmpeg, instead of letting the tests fail on a missing binary.
       - name: Install ffmpeg
-        run: choco install ffmpeg -y
+        shell: pwsh
+        run: |
+          for ($attempt = 1; $attempt -le 5; $attempt++) {
+            choco install ffmpeg -y --no-progress
+            if (Get-Command ffmpeg -ErrorAction SilentlyContinue) { break }
+            Write-Host "ffmpeg is not installed (attempt $attempt of 5)"
+            Start-Sleep -Seconds (20 * $attempt)
+          }
+          if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) { throw 'ffmpeg could not be installed' }
+          ffmpeg -version | Select-Object -First 1
 
       - name: Test
         run: dotnet test Pulsa.slnx -c Release --no-build
