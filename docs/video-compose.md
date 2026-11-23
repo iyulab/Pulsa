@@ -60,6 +60,8 @@ The composer throws nothing for a request it can judge. The result carries `succ
 - a style is invalid;
 - the scene duration is not positive;
 - the fonts folder is missing;
+- the ffmpeg in use has no `subtitles` filter (it was built without libass), which every caption needs — the sentence
+  names the missing filter, and no work directory or output is created;
 - ffmpeg fails.
 
 Cancellation also ends in `success: false`, with the reason in `error`. A failed or cancelled run does not
