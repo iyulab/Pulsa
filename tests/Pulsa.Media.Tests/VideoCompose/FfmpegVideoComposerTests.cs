@@ -1,5 +1,6 @@
 using FFMpegCore;
 using AwesomeAssertions;
+using Pulsa.Media.Tests.Support;
 using PulsaVideoCompose;
 using Xunit;
 
@@ -137,10 +138,11 @@ public class FfmpegVideoComposerTests : IDisposable
         result.Error.Should().Contain(missing);
     }
 
-    // Live: needs a real ffmpeg on PATH (CI installs one).
+    // Live: needs a real ffmpeg on PATH (CI installs one) built with libass.
     [Fact]
     public async Task ComposeAsync_AFontThatIsNotFound_IsReportedAndTheVideoIsStillWritten()
     {
+        FfmpegFilters.Require("subtitles");
         var images = await CreateImagesAsync();
         var composer = new FfmpegVideoComposer(string.Empty, new VideoComposeOptions(
             Captions: CaptionStyle.DefaultCaptions with { FontName = "No Such Font Family 41c7" }));
@@ -161,6 +163,7 @@ public class FfmpegVideoComposerTests : IDisposable
     [Fact]
     public async Task ComposeAsync_WhenTheFontCheckFails_TheWrittenVideoIsStillASuccess()
     {
+        FfmpegFilters.Require("subtitles");
         var images = await CreateImagesAsync();
         var composer = new FfmpegVideoComposer(
             string.Empty,
@@ -180,6 +183,7 @@ public class FfmpegVideoComposerTests : IDisposable
     [Fact]
     public async Task ComposeAsync_FontsThatAreFound_ReportNoSubstitution()
     {
+        FfmpegFilters.Require("subtitles");
         var images = await CreateImagesAsync();
 
         var result = await new FfmpegVideoComposer(string.Empty).ComposeAsync(new ComposeVideoRequest(
