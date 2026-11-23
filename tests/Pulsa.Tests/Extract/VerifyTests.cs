@@ -160,6 +160,20 @@ public class VerifyTests
     }
 
     [Fact]
+    public void FuzzyMatching_DoesNotCountPunctuationAtTheEdgesOfWords_AndTheSpanLeavesItOut()
+    {
+        var text = "Invoice 2026-11-02. Total due: 1,200 won. Paid by card.";
+        var schema = new ExtractSchema([new ExtractField("total", FieldType.Number)]);
+        Candidate[] output = [new("total", "1200", "total due is 1,200 won")]; // the model dropped the colon and the full stop
+
+        var result = Extractor.Verify(text, schema, output, new ExtractOptions { Fuzzy = true, Threshold = 0.75 });
+
+        var field = result.Fields.Should().ContainSingle().Subject;
+        field.Match.Should().Be(MatchKind.Fuzzy);
+        text[field.Span.Start..field.Span.End].Should().Be("Total due: 1,200 won");
+    }
+
+    [Fact]
     public void Verification_IsDeterministic()
     {
         Candidate[] output = [new("vendor", "Hanbit Trading", "from Hanbit Trading"), new("total", "1234.5", "1,234.50")];

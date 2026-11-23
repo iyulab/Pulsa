@@ -58,9 +58,9 @@ internal sealed class Locator
     /// </summary>
     private Found? FindFuzzy(string normalizedQuote, double threshold)
     {
-        var quoteWords = normalizedQuote.Split(' ');
+        var quoteWords = normalizedQuote.Split(' ').Select(w => w[EdgeBounds(w)]).Where(w => w.Length > 0).ToArray();
         var words = Words();
-        if (words.Count == 0) return null;
+        if (quoteWords.Length == 0 || words.Count == 0) return null;
         var width = Math.Min(quoteWords.Length, words.Count);
         (int First, double Score)? best = null;
         for (var first = 0; first + width <= words.Count; first++)
@@ -70,8 +70,15 @@ internal sealed class Locator
             if (best is null || score > best.Value.Score) best = (first, score);
         }
         if (best is not { } b || b.Score < threshold) return null;
-        var startWord = words[b.First];
-        var endWord = words[b.First + width - 1];
+        // A window as wide as the quote can carry a stray word at either end when the quote left one out; the span
+        // runs from the first to the last word the two share.
+        var shared = quoteWords.ToHashSet(StringComparer.Ordinal);
+        var firstShared = b.First;
+        var lastShared = b.First + width - 1;
+        while (firstShared < lastShared && !shared.Contains(words[firstShared].Word)) firstShared++;
+        while (lastShared > firstShared && !shared.Contains(words[lastShared].Word)) lastShared--;
+        var startWord = words[firstShared];
+        var endWord = words[lastShared];
         return new Found(_startOf[startWord.Start], _endOf[endWord.End - 1], MatchKind.Fuzzy);
     }
 
@@ -83,12 +90,31 @@ internal sealed class Locator
         {
             if (i == _normalized.Length || _normalized[i] == ' ')
             {
-                if (i > start) words.Add((_normalized[start..i], start, i));
+                if (i > start)
+                {
+                    // Punctuation at the edges of a word ("due:", "won.") is not part of what is compared, nor of the span.
+                    var word = _normalized[start..i];
+                    var bounds = EdgeBounds(word);
+                    var (offset, length) = bounds.GetOffsetAndLength(word.Length);
+                    if (length > 0) words.Add((word.Substring(offset, length), start + offset, start + offset + length));
+                }
                 start = i + 1;
             }
         }
         return words;
     }
+
+    /// <summary>The part of a word between its leading and trailing punctuation or symbols (none left: an empty range).</summary>
+    private static Range EdgeBounds(string word)
+    {
+        var start = 0;
+        var end = word.Length;
+        while (start < end && IsEdge(word[start])) start++;
+        while (end > start && IsEdge(word[end - 1])) end--;
+        return start..end;
+    }
+
+    private static bool IsEdge(char c) => char.IsPunctuation(c) || char.IsSymbol(c);
 
     private static int CommonInOrder(string[] a, string[] b)
     {

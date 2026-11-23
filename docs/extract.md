@@ -2,16 +2,29 @@
 
 Pulls the fields a schema names out of a text, and proves each value against the text: every value it returns comes
 with the place in the text it was read from, and a value the text does not support is refused with the reason instead
-of returned. The model reads the text; Pulsa owns the proof. Status: **draft** — verification and extraction with a model are
-implemented in `Pulsa`; the CLI is not yet. This contract may change before the first release.
+of returned. The model reads the text; Pulsa owns the proof. Status: **draft** — verification, extraction with a model and
+the command line are implemented. This contract may change before the first release.
 
 - **Module**: `Pulsa`, which brings no dependency beyond the model the caller supplies.
-- **Ways in**: library (`Extractor.ExtractAsync` · `Extractor.Verify`), CLI (planned).
+- **Ways in**: library (`Extractor.ExtractAsync` · `Extractor.Verify`; `ExtractJson` reads a schema or candidates from
+  JSON and writes a result as JSON), CLI (`Pulsa.Cli extract` · `Pulsa.Cli verify`).
 - **Model**: required for extraction — a chat model the caller supplies (`IChatClient` in .NET) reads the text and
   answers with values and the words it read each one from. Verification alone takes no model: given a text, a schema
   and any structured output already made (by a chat model, a structured-output call of an agent framework, or a
   person), it checks that output the same way. The capability never creates a client or holds a credential, and does
   not replace a structured-output call: it is the step after one.
+
+## CLI
+
+`Pulsa.Cli extract --text <file> --schema <schema.json> --openai-key <key>` asks a chat model (`--openai-model`, default
+`gpt-4o-mini`; `--openai-endpoint` for any OpenAI-compatible server, which then needs no key) and verifies its answer.
+`Pulsa.Cli verify --text <file> --schema <schema.json> --candidates <candidates.json>` takes no model and checks values
+someone already proposed. Both take `--fuzzy` and `--threshold <0-1>`, and write the result as JSON to standard output or
+to `--output <file>` (which must not exist). The schema file is `{"fields": [{ "name", "type", … }]}` as in Input; the
+candidates file is `{"fields": {"<name>": [{"value": …, "quote": …}]}}`, the shape the model is asked to answer in. Refused
+values are listed on standard error as `refused: <name> (<reason>): <detail>`. The exit code is 0 when the run
+completed — refused values are a result, not a failure — and 1 with the reason on standard error otherwise (unreadable
+schema or candidates, an unusable schema, a missing or malformed option, an error from the model).
 
 Input documents of any kind — a meeting transcript, a medical note, an invoice, a contract — are text by the time they
 reach this capability. Turning a file into text is a document parser's work and stays outside.
@@ -73,7 +86,8 @@ evaluation texts are kept with the tests; which texts, under what terms, is deci
 
 ## Open questions
 
-- Whether fuzzy matching is worth having at all, or whether `normalized` is the only lenient match (a fuzzy quote is
+- Whether fuzzy matching is worth having at all (it ignores punctuation at the edges of words and ends its span at the
+  first and last word it shares with the quote), or whether `normalized` is the only lenient match (a fuzzy quote is
   the case a person most needs to check).
 - Whether a field may be a nested object or a list of objects (a line item with its own fields), or the schema stays
   flat with `many` fields for a first version.

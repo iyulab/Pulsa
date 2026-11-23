@@ -8,7 +8,10 @@ maintainer who publishes it.
 - **Grounded extraction (draft)** in `Pulsa`: `Extractor.Verify` checks any structured output against the text — every
   value comes with the place it was read from (exact or normalized match, fuzzy on request), numbers and dates are read
   by the code from the quote, and an unsupported value is refused with the reason. `Extractor.ExtractAsync` asks the caller's `IChatClient` for the
-  values and their words, copied as written, then verifies the answer the same way. Contract: `docs/extract.md`.
+  values and their words, copied as written, then verifies the answer the same way. Contract: `docs/extract.md`. `ExtractJson` reads a schema or candidate values from JSON and writes a result as JSON,
+  and `Pulsa.Cli` (a new command-line project, not yet published) runs `extract` and `verify` on files without a consuming
+  application; `extract` needs no key for a local server named by `--openai-endpoint`. Fuzzy matching ignores punctuation at
+  the edges of words and ends its span at the first and last word shared with the quote.
 - **Breaking — packages are cut by the dependency they bring.** A consumer decides whether to take on a dependency
   (ffmpeg, a service, a library), so capabilities that share one now share a package. Namespaces and types are unchanged;
   only package references move:

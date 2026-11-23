@@ -64,6 +64,7 @@ evidence, is in [CONTRIBUTING.md](CONTRIBUTING.md).
 | Package | Description | Surfaces | NuGet |
 |---|---|---|---|
 | `Pulsa` | Capabilities that bring no dependency beyond the chat model you supply: refine a speech-to-text transcript (WebVTT) behind a sound-alike acceptance gate, and draft on-screen captions | SDK | [![NuGet](https://img.shields.io/nuget/v/Pulsa.svg)](https://www.nuget.org/packages/Pulsa) |
+| `Pulsa.Cli` | `Pulsa` as an executable: `extract`, `verify` (grounded extraction) | CLI | not yet published |
 | `PulsaMedia` | Capabilities that need ffmpeg: compose images and captions into a captioned, Ken Burns–animated video, and pixelate a region of an image or a time range of a video | SDK | not yet published |
 | `PulsaMedia.Cli` | `PulsaMedia` as an executable: `compose`, `draft-captions`, `redact` | CLI | not yet published |
 | `PulsaChannel.SDK` | One-to-one messaging channel contract, in-memory fake provider, ordered event queue ([contract](docs/channel-connector.md)) | SDK | not yet published |
