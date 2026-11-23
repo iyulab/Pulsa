@@ -5,6 +5,11 @@ maintainer who publishes it.
 
 ## Unreleased
 
+- **Build: no machine-specific package source.** `Directory.Build.props` no longer adds a local package folder to the
+  restore sources; packages restore from the configured NuGet sources only. The build workflow now also runs when the
+  shared build settings at the repository root change (`Directory.*.props`, the solution, `global.json`). No package changes.
+- Each published package (`Pulsa`, `PulsaMedia`, `PulsaMedia.Cli`) carries its own README, shown on its NuGet page.
+- Tests: the live video-composition tests skip, with the reason, on an ffmpeg built without the `subtitles` filter (libass) instead of failing.
 - **Publishing: `PulsaMedia` is published like `Pulsa`.** A push to `main` that changes its version line packs it into the
   same call to the publisher as `Pulsa`; the starting version 0.0.0 is never published. No package changes.
 - **Breaking — packages are cut by the dependency they bring.** A consumer decides whether to take on a dependency
