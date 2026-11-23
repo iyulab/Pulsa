@@ -65,6 +65,11 @@ public sealed class FfmpegVideoComposer
             return new ComposeVideoResult(false, null, null, ex.Message);
         }
 
+        // Captions are always burned in, so a build without the subtitles filter cannot compose at all — say so
+        // instead of letting ffmpeg fail on a filter graph it cannot parse.
+        if (FfmpegFilterList.SubtitlesProblem(await FfmpegFilterList.ReadAsync(_ffOptions, cancellationToken)) is { } problem)
+            return new ComposeVideoResult(false, null, null, problem);
+
         var workDir = Directory.CreateTempSubdirectory("pulsa-videocompose-");
         try
         {

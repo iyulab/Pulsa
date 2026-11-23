@@ -5,6 +5,7 @@ maintainer who publishes it.
 
 ## Unreleased
 
+- `FfmpegVideoComposer.ComposeAsync` fails with a clear sentence — «This ffmpeg has no 'subtitles' filter (it was built without libass)…» — when the ffmpeg build lacks the filter that burns captions, instead of ffmpeg's filter-graph parsing error. An ffmpeg that cannot be run or read is left to fail on its own error.
 - **Build: no machine-specific package source.** `Directory.Build.props` no longer adds a local package folder to the
   restore sources; packages restore from the configured NuGet sources only. The build workflow now also runs when the
   shared build settings at the repository root change (`Directory.*.props`, the solution, `global.json`). No package changes.

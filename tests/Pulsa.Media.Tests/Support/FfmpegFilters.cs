@@ -25,18 +25,7 @@ internal static class FfmpegFilters
         available is null ? [] : filters.Where(f => !available.Contains(f)).ToArray();
 
     /// <summary>Filter names from <c>ffmpeg -filters</c>, or null when ffmpeg could not be run.</summary>
-    internal static IReadOnlySet<string>? ParseFilterList(string output)
-    {
-        var names = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var line in output.Split('\n'))
-        {
-            // " TS pixelize          V->V       Pixelize video." — flags, name, then the pads
-            var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length >= 3 && parts[2].Contains("->", StringComparison.Ordinal))
-                names.Add(parts[1]);
-        }
-        return names.Count > 0 ? names : null;
-    }
+    internal static IReadOnlySet<string>? ParseFilterList(string output) => PulsaVideoCompose.FfmpegFilterList.Parse(output);
 
     private static IReadOnlySet<string>? ReadFilters()
     {
