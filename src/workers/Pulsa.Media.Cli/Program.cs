@@ -34,7 +34,7 @@ static void PrintUsage()
                 [--start <seconds>] [--end <seconds>] [--ffmpeg-dir <dir>]
           PulsaMedia.Cli redact --input <image or video> --output <path> --detect <what to hide> [--openai-key <key>]
                 [--openai-model <model>] [--openai-endpoint <url>] [--min-confidence <0-1>]
-                [--frame-at <seconds>] [--start <seconds>] [--end <seconds>] [--region ...] [--ffmpeg-dir <dir>]
+                [--frame-at <seconds> | --sample-every <seconds> [--max-samples <n>]] [--start <seconds>] [--end <seconds>] [--region ...] [--ffmpeg-dir <dir>]
         """);
 }
 
@@ -150,8 +150,10 @@ static async Task<int> RunRedactAsync(string[] args)
         // The command line is a host: it picks the vision model and takes the credential.
         var vision = CreateOpenAiClient(Single("openai-key"), Single("openai-endpoint"))
             .GetChatClient(Single("openai-model") ?? "gpt-4o-mini").AsIChatClient();
-        // For a video the model looks at one frame (--frame-at, default the start of --start..--end); what it finds is hidden over the whole range.
-        detection = new RedactDetection(new ChatRegionDetector(vision, detect), Number("min-confidence") ?? 0.5, Number("frame-at"));
+        // For a video the model looks at one frame (--frame-at, default the start of --start..--end) and what it finds is hidden
+        // over the whole range — or at a frame every --sample-every seconds, each found region hidden until the next frame.
+        detection = new RedactDetection(new ChatRegionDetector(vision, detect), Number("min-confidence") ?? 0.5,
+            Number("frame-at"), Number("sample-every"), (int?)Number("max-samples") ?? 60);
     }
 
     // No --ffmpeg-dir: ffmpeg is looked up on PATH.
@@ -160,9 +162,9 @@ static async Task<int> RunRedactAsync(string[] args)
         new RedactRequest(input, output, regions, StartTime: Number("start"), EndTime: Number("end")), detection);
 
     foreach (var found in result.Detected)
-        Console.Error.WriteLine($"hidden: {found.Label} at {found.Region.X},{found.Region.Y} {found.Region.Width}x{found.Region.Height} (confidence {found.Confidence:0.00})");
+        Console.Error.WriteLine($"hidden: {found.Label}{AtTime(found)} at {found.Region.X},{found.Region.Y} {found.Region.Width}x{found.Region.Height} (confidence {found.Confidence:0.00})");
     foreach (var doubtful in result.Review)
-        Console.Error.WriteLine($"review: {doubtful.Label} at {doubtful.Region.X},{doubtful.Region.Y} {doubtful.Region.Width}x{doubtful.Region.Height} (confidence {doubtful.Confidence:0.00}) — not hidden");
+        Console.Error.WriteLine($"review: {doubtful.Label}{AtTime(doubtful)} at {doubtful.Region.X},{doubtful.Region.Y} {doubtful.Region.Width}x{doubtful.Region.Height} (confidence {doubtful.Confidence:0.00}) — not hidden");
     foreach (var note in result.Notes) Console.Error.WriteLine($"note: {note}");
     if (!result.Success)
     {
@@ -172,6 +174,10 @@ static async Task<int> RunRedactAsync(string[] args)
     Console.WriteLine($"Wrote {result.OutputPath}");
     return 0;
 }
+
+static string AtTime(DetectedRegion found) => found.At is { } at
+    ? string.Create(System.Globalization.CultureInfo.InvariantCulture, $" @{at:0.###}s")
+    : string.Empty;
 
 static Dictionary<string, string[]> ParseFlags(string[] args)
 {

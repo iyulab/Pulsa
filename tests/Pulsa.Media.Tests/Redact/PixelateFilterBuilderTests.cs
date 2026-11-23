@@ -7,6 +7,32 @@ namespace Pulsa.Media.Tests.Redact;
 public class PixelateFilterBuilderTests
 {
     [Fact]
+    public void BuildTimed_EachRegionHasItsOwnTimeRange_AndOneWithoutIsAlwaysOn()
+    {
+        var filter = PixelateFilterBuilder.BuildTimed(
+        [
+            new TimedRegion(new RedactRegion(0, 0, 32, 32), 0, 2),
+            new TimedRegion(new RedactRegion(50, 0, 32, 32), 2, 4.5),
+            new TimedRegion(new RedactRegion(90, 0, 32, 32)),
+        ]);
+
+        filter.Should().Contain("overlay=0:0:format=auto:enable='between(t,0,2)'");
+        filter.Should().Contain("overlay=50:0:format=auto:enable='between(t,2,4.5)'");
+        filter.Should().Contain("overlay=90:0:format=auto");
+        filter.Should().NotContain("overlay=90:0:format=auto:enable");
+    }
+
+    [Fact]
+    public void BuildTimed_ARangeWithOnlyOneEnd_OrStartingAtItsEnd_IsRefused()
+    {
+        var oneEnd = () => PixelateFilterBuilder.BuildTimed([new TimedRegion(new RedactRegion(0, 0, 8, 8), 1, null)]);
+        var empty = () => PixelateFilterBuilder.BuildTimed([new TimedRegion(new RedactRegion(0, 0, 8, 8), 2, 2)]);
+
+        oneEnd.Should().Throw<ArgumentException>();
+        empty.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
     public void Build_NoTimeRange_ProducesCropScaleScaleOverlayChain()
     {
         var filter = PixelateFilterBuilder.Build([new RedactRegion(10, 20, 100, 50)]);

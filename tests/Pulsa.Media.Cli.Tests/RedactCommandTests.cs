@@ -118,6 +118,27 @@ public sealed class RedactCommandTests : IDisposable
     }
 
     [Fact]
+    public async Task Redact_Detect_OnAVideo_SampleEvery_AsksTheModelOncePerFrame_AndSaysWhenEachRegionWasFound()
+    {
+        var input = Path.Combine(_tempDir, "sampled.mp4");
+        await FFMpegArguments
+            .FromFileInput("rgbtestsrc=size=200x100:rate=10:duration=4", verifyExists: false, opt => opt.WithCustomArgument("-f lavfi"))
+            .OutputToFile(input, overwrite: true, opt => opt.WithVideoCodec("libx264").WithCustomArgument("-pix_fmt yuv420p"))
+            .ProcessAsynchronously(ffMpegOptions: new FFOptions { BinaryFolder = FfmpegFolder });
+        var output = Path.Combine(_tempDir, "sampled-out.mp4");
+        using var vision = new FakeChatEndpoint("""[{"label":"face","x":20,"y":20,"width":60,"height":40,"confidence":0.9}]""");
+
+        var (exitCode, _, stderr) = await RunAsync(
+            ["redact", "--input", input, "--output", output, "--detect", "faces", "--sample-every", "2",
+             "--openai-endpoint", vision.Url, .. FfmpegDirArgument()]);
+
+        exitCode.Should().Be(0, stderr);
+        stderr.Should().Contain("hidden: face @0s at 20,20 60x40").And.Contain("hidden: face @2s at 20,20 60x40");
+        vision.Requests.Should().Be(2);
+        File.Exists(output).Should().BeTrue();
+    }
+
+    [Fact]
     public async Task Redact_DetectWithoutAKeyOrAnEndpoint_ExitsOne()
     {
         var (exitCode, _, stderr) = await RunAsync("redact", "--input", "in.png", "--output", "out.png", "--detect", "faces");

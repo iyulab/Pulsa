@@ -13,6 +13,19 @@ internal static class PictureSize
 {
     public static async Task<(int Width, int Height)> ReadAsync(string path, FFOptions ffOptions, CancellationToken cancellationToken)
     {
+        var json = await ProbeAsync(path, ffOptions, cancellationToken, "-select_streams", "v:0", "-show_entries", "stream=width,height");
+        return Parse(json) ?? throw new InvalidDataException($"{path} has no picture to look at.");
+    }
+
+    /// <summary>The length of the media in seconds, as the container states it.</summary>
+    public static async Task<double> ReadDurationAsync(string path, FFOptions ffOptions, CancellationToken cancellationToken)
+    {
+        var json = await ProbeAsync(path, ffOptions, cancellationToken, "-show_entries", "format=duration");
+        return ParseDuration(json) ?? throw new InvalidDataException($"{path} does not state how long it is.");
+    }
+
+    private static async Task<string> ProbeAsync(string path, FFOptions ffOptions, CancellationToken cancellationToken, params string[] selection)
+    {
         var start = new ProcessStartInfo(GlobalFFOptions.GetFFProbeBinaryPath(ffOptions))
         {
             RedirectStandardOutput = true,
@@ -20,7 +33,7 @@ internal static class PictureSize
             UseShellExecute = false,
             CreateNoWindow = true,
         };
-        foreach (var argument in new[] { "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "json", path })
+        foreach (var argument in new[] { "-v", "error" }.Concat(selection).Concat(new[] { "-of", "json", path }))
             start.ArgumentList.Add(argument);
 
         using var process = Process.Start(start) ?? throw new InvalidOperationException("ffprobe did not start.");
@@ -36,7 +49,19 @@ internal static class PictureSize
 
         if (process.ExitCode != 0)
             throw new InvalidDataException($"ffprobe could not read {path}: {(await error).Trim()}");
-        return Parse(await output) ?? throw new InvalidDataException($"{path} has no picture to look at.");
+        return await output;
+    }
+
+    /// <summary>The duration in ffprobe's JSON answer, or null when it is missing or not a positive number.</summary>
+    internal static double? ParseDuration(string json)
+    {
+        using var document = JsonDocument.Parse(json);
+        if (document.RootElement.TryGetProperty("format", out var format) &&
+            format.TryGetProperty("duration", out var duration) && duration.ValueKind == JsonValueKind.String &&
+            double.TryParse(duration.GetString(), System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out var seconds) && seconds > 0)
+            return seconds;
+        return null;
     }
 
     /// <summary>The size of the first stream in ffprobe's JSON answer, or null when it has none.</summary>

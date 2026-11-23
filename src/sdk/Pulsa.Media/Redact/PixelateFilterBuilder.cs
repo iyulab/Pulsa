@@ -11,6 +11,9 @@ namespace PulsaRedact;
 /// confirmed to work for <c>overlay</c> at implementation time — see MediaRedactorTests' live test,
 /// not assumed by analogy to composer's own <c>subtitles</c>-filter caveat).
 /// </summary>
+/// <summary>A rectangle to pixelate and, for a video, the seconds it is hidden for (both or neither).</summary>
+public readonly record struct TimedRegion(RedactRegion Region, double? Start = null, double? End = null);
+
 public static class PixelateFilterBuilder
 {
     public static string Build(
@@ -18,24 +21,31 @@ public static class PixelateFilterBuilder
         double? startTime = null, double? endTime = null, int blockSize = 16)
     {
         ArgumentNullException.ThrowIfNull(regions);
+        return BuildTimed(regions.Select(r => new TimedRegion(r, startTime, endTime)).ToList(), blockSize);
+    }
+
+    /// <summary>
+    /// The same pixelation where each region has its own time range — a region without one is hidden for the whole
+    /// video. Each range needs both its start and its end, with the start before the end.
+    /// </summary>
+    public static string BuildTimed(IReadOnlyList<TimedRegion> regions, int blockSize = 16)
+    {
+        ArgumentNullException.ThrowIfNull(regions);
         if (regions.Count == 0)
             throw new ArgumentException("Redaction needs at least one region.");
-        if (startTime.HasValue != endTime.HasValue)
+        if (regions.Any(r => r.Start.HasValue != r.End.HasValue))
             throw new ArgumentException("startTime and endTime must both be supplied together, or neither.");
-        if (regions.Any(r => r.Width <= 0 || r.Height <= 0))
+        if (regions.Any(r => r.Region.Width <= 0 || r.Region.Height <= 0))
             throw new ArgumentException("width and height must both be positive.");
-        if (startTime.HasValue && startTime.Value >= endTime!.Value)
+        if (regions.Any(r => r.Start.HasValue && r.Start.Value >= r.End!.Value))
             throw new ArgumentException("startTime must be less than endTime.");
 
         var inv = CultureInfo.InvariantCulture;
-        var enableClause = startTime.HasValue
-            ? string.Format(inv, ":enable='between(t,{0},{1})'", startTime.Value, endTime!.Value)
-            : string.Empty;
 
         var chains = new List<string>();
         for (var i = 0; i < regions.Count; i++)
         {
-            var (x, y, width, height) = regions[i];
+            var (x, y, width, height) = regions[i].Region;
             var crop = string.Format(inv, "crop={0}:{1}:{2}:{3}", width, height, x, y);
             // Computed as integers in C#, floored to 1, and emitted as literals -- NOT as an ffmpeg
             // expression string ("scale=width/blockSize:height/blockSize"). ffmpeg evaluates that
@@ -55,8 +65,11 @@ public static class PixelateFilterBuilder
         {
             var source = i == 0 ? "[0:v]" : $"[out{i - 1}]";
             var label = i == regions.Count - 1 ? string.Empty : $"[out{i}]";
+            var enable = regions[i].Start.HasValue
+                ? string.Format(inv, ":enable='between(t,{0},{1})'", regions[i].Start!.Value, regions[i].End!.Value)
+                : string.Empty;
             chains.Add(string.Format(inv, "{0}[blk{1}]overlay={2}:{3}:format=auto{4}{5}",
-                source, i, regions[i].X, regions[i].Y, enableClause, label));
+                source, i, regions[i].Region.X, regions[i].Region.Y, enable, label));
         }
 
         // ";" separates filterchains per ffmpeg's filter-graph grammar; "," separates filters within a chain.

@@ -43,60 +43,54 @@ public sealed class MediaRedactor
             return new RedactResult(false, null, "The minimum confidence must be between 0 and 1.");
         if (detection is { FrameAt: < 0 })
             return new RedactResult(false, null, "The frame to look at must not be before the start of the video.");
+        if (detection is { SampleEvery: <= 0 })
+            return new RedactResult(false, null, "The time between frames to look at must be positive.");
+        if (detection is { SampleEvery: not null, FrameAt: not null })
+            return new RedactResult(false, null, "Look at one frame (FrameAt) or at a frame every so often (SampleEvery), not both.");
+        if (detection is { MaxSamples: < 1 })
+            return new RedactResult(false, null, "At least one frame must be allowed for the detector.");
 
         try
         {
-            var regions = request.Regions.ToList();
+            // Images never carry a time range — StartTime/EndTime are accepted but ignored.
+            var from = isImage ? null : request.StartTime;
+            var until = isImage ? null : request.EndTime;
+            var regions = request.Regions.Select(r => new TimedRegion(r, from, until)).ToList();
             List<DetectedRegion> hidden = [], review = [];
             List<string> notes = [];
             if (detection is not null)
             {
-                // The picture the detector looks at: the image itself, or for a video one frame taken out of it. Its
-                // size is read from that picture, so regions are in the coordinates the pixelate filter sees (a video
-                // with rotation metadata is turned upright when decoded, and so is the frame).
-                string picture = request.InputPath, frameFile = string.Empty;
-                try
+                if (!isImage && detection.SampleEvery is { } every)
                 {
-                    if (!isImage)
-                    {
-                        var at = detection.FrameAt ?? request.StartTime ?? 0;
-                        frameFile = Path.Combine(Path.GetTempPath(), $"pulsa-redact-frame-{Guid.NewGuid():N}.png");
-                        await FFMpegArguments
-                            .FromFileInput(request.InputPath, verifyExists: true, opt => opt.Seek(TimeSpan.FromSeconds(at)))
-                            .OutputToFile(frameFile, overwrite: true, opt => opt.WithCustomArgument("-frames:v 1"))
-                            .CancellableThrough(cancellationToken)
-                            .ProcessAsynchronously(ffMpegOptions: _ffOptions);
-                        if (!File.Exists(frameFile) || new FileInfo(frameFile).Length == 0)
-                            return new RedactResult(false, null, $"There is no picture at {at:0.###} s in {request.InputPath}.");
-                        picture = frameFile;
-                    }
+                    var length = until ?? await PictureSize.ReadDurationAsync(request.InputPath, _ffOptions, cancellationToken);
+                    var first = from ?? 0;
+                    if (first >= length)
+                        return new RedactResult(false, null, "The time range to redact is empty: it starts at or after its end.");
+                    var count = (int)Math.Min(int.MaxValue, Math.Floor((length - first) / every - 1e-9) + 1);
+                    if (count > detection.MaxSamples)
+                        return new RedactResult(false, null,
+                            $"A frame every {every:0.###} s over {length - first:0.###} s is {count} frames for the detector, " +
+                            $"above the {detection.MaxSamples} allowed; use a longer interval or raise MaxSamples.");
 
-                    var (width, height) = await PictureSize.ReadAsync(picture, _ffOptions, cancellationToken);
-                    var found = await detection.Detector.DetectAsync(picture, width, height, cancellationToken);
-                    foreach (var candidate in found)
+                    var looks = new List<SampledLook>();
+                    for (var k = 0; k < count; k++)
                     {
-                        var clipped = Clip(candidate.Region, width, height);
-                        if (clipped is null)
-                        {
-                            notes.Add($"Refused '{candidate.Label}' at {Describe(candidate.Region)}: it lies outside the " +
-                                      $"{width}x{height} picture or is under {MinimumDetectedSide} px once clipped.");
-                            continue;
-                        }
-                        var checkedRegion = candidate with { Region = clipped.Value };
-                        if (candidate.Confidence >= detection.MinimumConfidence)
-                        {
-                            hidden.Add(checkedRegion);
-                            regions.Add(clipped.Value);
-                        }
-                        else
-                        {
-                            review.Add(checkedRegion);
-                        }
+                        var at = first + k * every;
+                        var look = await LookAsync(request.InputPath, isImage, at, detection, cancellationToken);
+                        hidden.AddRange(look.Hidden.Select(d => d with { At = at }));
+                        review.AddRange(look.Review.Select(d => d with { At = at }));
+                        notes.AddRange(look.Notes.Select(n => $"At {at:0.###} s: {n}"));
+                        looks.Add(new SampledLook(at, look.Hidden.Select(d => d with { At = at }).ToList()));
                     }
+                    regions.AddRange(RegionTrack.Build(looks, length));
                 }
-                finally
+                else
                 {
-                    if (frameFile.Length > 0 && File.Exists(frameFile)) File.Delete(frameFile);
+                    var look = await LookAsync(request.InputPath, isImage, detection.FrameAt ?? request.StartTime ?? 0, detection, cancellationToken);
+                    hidden.AddRange(look.Hidden);
+                    review.AddRange(look.Review);
+                    notes.AddRange(look.Notes);
+                    regions.AddRange(look.Hidden.Select(d => new TimedRegion(d.Region, from, until)));
                 }
             }
 
@@ -107,10 +101,9 @@ public sealed class MediaRedactor
                     Notes = notes,
                 };
 
-            // Images never carry a time range — StartTime/EndTime are accepted but ignored. Build is called inside
-            // the try so its own ArgumentException becomes a failure result, like every other failure here.
-            var filter = PixelateFilterBuilder.Build(
-                regions, isImage ? null : request.StartTime, isImage ? null : request.EndTime);
+            // Build is called inside the try so its own ArgumentException becomes a failure result, like every other
+            // failure here.
+            var filter = PixelateFilterBuilder.BuildTimed(regions);
 
             var args = FFMpegArguments
                 .FromFileInput(request.InputPath, verifyExists: true, opt =>
@@ -135,6 +128,56 @@ public sealed class MediaRedactor
         {
             return new RedactResult(false, null, ex.Message);
         }
+    }
+
+    private sealed record Look(List<DetectedRegion> Hidden, List<DetectedRegion> Review, List<string> Notes);
+
+    /// <summary>
+    /// One look of the detector at a picture: the image itself, or for a video the frame at <paramref name="at"/> seconds.
+    /// Its size is read from that picture, so regions are in the coordinates the pixelate filter sees (a video with
+    /// rotation metadata is turned upright when decoded, and so is the frame). Each found region is checked against the
+    /// picture and sorted into those hidden (at or above the confidence bar) and those left for review.
+    /// </summary>
+    private async Task<Look> LookAsync(
+        string input, bool isImage, double at, RedactDetection detection, CancellationToken cancellationToken)
+    {
+        var look = new Look([], [], []);
+        string picture = input, frameFile = string.Empty;
+        try
+        {
+            if (!isImage)
+            {
+                frameFile = Path.Combine(Path.GetTempPath(), $"pulsa-redact-frame-{Guid.NewGuid():N}.png");
+                await FFMpegArguments
+                    .FromFileInput(input, verifyExists: true, opt => opt.Seek(TimeSpan.FromSeconds(at)))
+                    .OutputToFile(frameFile, overwrite: true, opt => opt.WithCustomArgument("-frames:v 1"))
+                    .CancellableThrough(cancellationToken)
+                    .ProcessAsynchronously(ffMpegOptions: _ffOptions);
+                if (!File.Exists(frameFile) || new FileInfo(frameFile).Length == 0)
+                    throw new InvalidDataException($"There is no picture at {at:0.###} s in {input}.");
+                picture = frameFile;
+            }
+
+            var (width, height) = await PictureSize.ReadAsync(picture, _ffOptions, cancellationToken);
+            var found = await detection.Detector.DetectAsync(picture, width, height, cancellationToken);
+            foreach (var candidate in found)
+            {
+                var clipped = Clip(candidate.Region, width, height);
+                if (clipped is null)
+                {
+                    look.Notes.Add($"Refused '{candidate.Label}' at {Describe(candidate.Region)}: it lies outside the " +
+                                   $"{width}x{height} picture or is under {MinimumDetectedSide} px once clipped.");
+                    continue;
+                }
+                var checkedRegion = candidate with { Region = clipped.Value };
+                (candidate.Confidence >= detection.MinimumConfidence ? look.Hidden : look.Review).Add(checkedRegion);
+            }
+        }
+        finally
+        {
+            if (frameFile.Length > 0 && File.Exists(frameFile)) File.Delete(frameFile);
+        }
+        return look;
     }
 
     /// <summary>The part of <paramref name="region"/> inside the picture, or null when too little of it is.</summary>

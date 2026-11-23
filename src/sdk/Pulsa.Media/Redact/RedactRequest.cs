@@ -29,7 +29,11 @@ public sealed record RedactResult(bool Success, string? OutputPath, string? Erro
 }
 
 /// <summary>A region a detector found: where, what (the detector's own label) and how sure it is (0–1).</summary>
-public sealed record DetectedRegion(RedactRegion Region, string Label, double Confidence);
+public sealed record DetectedRegion(RedactRegion Region, string Label, double Confidence)
+{
+    /// <summary>For a video looked at in several frames: the time in seconds of the frame it was found in. Null otherwise.</summary>
+    public double? At { get; init; }
+}
 
 /// <summary>
 /// Detection port — the model role of redaction: given an image, where the things to hide are. Implemented by a vision
@@ -49,5 +53,11 @@ public interface IRegionDetector
 /// Redaction's extending stage: a detector, and the confidence a found region needs to be hidden (default 0.5).
 /// For a video the detector looks at one picture — the frame at <paramref name="FrameAt"/> seconds (default: the start
 /// of the time range, else the first frame) — and what it finds is hidden as fixed rectangles over the whole time range.
+/// Or, with <paramref name="SampleEvery"/>, it looks at a frame every that many seconds across the time range and each
+/// found region is hidden from its frame to the next, over the area it and its match in the next frame cover together.
+/// Each frame is one call to the detector, so <paramref name="MaxSamples"/> (default 60) refuses a range that would take
+/// more of them before any is made. <paramref name="FrameAt"/> and <paramref name="SampleEvery"/> are alternatives.
 /// </summary>
-public sealed record RedactDetection(IRegionDetector Detector, double MinimumConfidence = 0.5, double? FrameAt = null);
+public sealed record RedactDetection(
+    IRegionDetector Detector, double MinimumConfidence = 0.5, double? FrameAt = null,
+    double? SampleEvery = null, int MaxSamples = 60);

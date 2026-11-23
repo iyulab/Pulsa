@@ -11,11 +11,15 @@ maintainer who publishes it.
   (`RedactDetection`) — `ChatRegionDetector` asks any vision `IChatClient` — redaction finds what to hide in an image;
   every found region is clipped to the picture, hidden only above the confidence bar, and returned in `Detected`,
   `Review` (found, not hidden) or `Notes` (refused). On a video the detector looks at one frame — `FrameAt` seconds,
-  default the start of the time range — and what it finds is hidden over the whole range (fixed rectangles, no tracking).
+  default the start of the time range — and what it finds is hidden over the whole range (fixed rectangles), or, with
+  `SampleEvery`, at a frame every that many seconds: each found region is hidden from its frame to the next over the area
+  it and its match in the next frame cover together (`MaxSamples`, default 60, refuses a range that would ask the detector
+  about more frames, before any is asked; each result region carries the time `At` of its frame).
   The picture size is read with `System.Text.Json` rather than FFMpegCore's reflection-based probe, so detection runs in a
   trimmed or native-AOT host (checked in a trimmed self-contained publish, where the old call failed); `PulsaMedia` sets
   `IsAotCompatible`. `PulsaMedia.Cli redact` takes several `--region` values, `--detect <what>` with `--openai-key <key>`
-  (not needed for a server named by `--openai-endpoint` that takes none) and `--frame-at <seconds>`.
+  (not needed for a server named by `--openai-endpoint` that takes none), `--frame-at <seconds>` or
+  `--sample-every <seconds>` with `--max-samples <n>`.
 - **Capability contracts.** `docs/` now holds a language-neutral contract for video composition, redaction, caption
   drafting and transcript refinement, next to the channel connector: what each takes and returns, the invariants it
   keeps, how it fails, its module and the ways to reach it. The README's design principles link each one. No package changes.

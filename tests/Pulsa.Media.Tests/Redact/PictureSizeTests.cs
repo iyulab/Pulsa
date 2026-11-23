@@ -40,6 +40,19 @@ public class PictureSizeTests : IDisposable
         size.Should().Be((123, 45));
     }
 
+    [Theory]
+    [InlineData("""{"format":{"duration":"12.480000"}}""", 12.48)]
+    [InlineData("""{"format":{"duration":"0.5"}}""", 0.5)]
+    public void ParseDuration_TheContainersLength_IsInSeconds(string json, double seconds) =>
+        PictureSize.ParseDuration(json).Should().Be(seconds);
+
+    [Theory]
+    [InlineData("{}")]
+    [InlineData("""{"format":{}}""")]
+    [InlineData("""{"format":{"duration":"N/A"}}""")]
+    [InlineData("""{"format":{"duration":"0"}}""")]
+    public void ParseDuration_NoUsableLength_IsNull(string json) => PictureSize.ParseDuration(json).Should().BeNull();
+
     [Fact]
     public async Task ReadAsync_AFileThatIsNoPicture_SaysSo()
     {

@@ -332,6 +332,72 @@ public class MediaRedactorTests : IDisposable
         return path;
     }
 
+    /// <summary>Answers each look with the next scripted answer, and keeps what it was handed.</summary>
+    private sealed class ScriptedDetector(params DetectedRegion[][] answers) : IRegionDetector
+    {
+        private int _calls;
+        public List<byte[]> Pictures { get; } = [];
+        public string Name => "scripted";
+
+        public async Task<IReadOnlyList<DetectedRegion>> DetectAsync(string imagePath, int width, int height, CancellationToken cancellationToken)
+        {
+            Pictures.Add(await File.ReadAllBytesAsync(imagePath, cancellationToken));
+            return answers[Math.Min(_calls++, answers.Length - 1)];
+        }
+    }
+
+    [Fact]
+    public async Task RedactAsync_LiveVideo_SampledEveryTwoSeconds_LooksAtAFrameEachTime_AndReportsWhenEachWasFound()
+    {
+        var redactor = new MediaRedactor(ResolveFfmpegBinaryFolder());
+        var inputPath = await CreateRedThenBlueVideoAsync(Path.Combine(_tempDir, "sampled.mp4"));
+        var outputPath = Path.Combine(_tempDir, "sampled-out.mp4");
+        var detector = new ScriptedDetector(
+            [new DetectedRegion(new RedactRegion(10, 10, 50, 30), "face", 0.9)],
+            [new DetectedRegion(new RedactRegion(60, 10, 50, 30), "face", 0.9), new DetectedRegion(new RedactRegion(0, 0, 20, 20), "badge", 0.1)]);
+
+        var result = await redactor.RedactAsync(new RedactRequest(inputPath, outputPath, Regions: []),
+            new RedactDetection(detector, SampleEvery: 2), TestContext.Current.CancellationToken);
+
+        result.Success.Should().BeTrue(because: result.Error);
+        detector.Pictures.Should().HaveCount(2, "a frame at 0 s and one at 2 s of a four-second video");
+        detector.Pictures[0].Should().NotEqual(detector.Pictures[1], "the frames are taken at different times (red, then blue)");
+        result.Detected.Select(d => (d.Label, d.At)).Should().Equal(("face", 0.0), ("face", 2.0));
+        result.Review.Should().ContainSingle().Which.Should().Match<DetectedRegion>(d => d.Label == "badge" && d.At == 2.0);
+        var probe = await FFProbe.AnalyseAsync(outputPath, ffOptions: new FFOptions { BinaryFolder = ResolveFfmpegBinaryFolder() }, cancellationToken: TestContext.Current.CancellationToken);
+        probe.Duration.TotalSeconds.Should().BeApproximately(4, precision: 0.5);
+    }
+
+    [Fact]
+    public async Task RedactAsync_VideoSampledOftenEnoughToExceedMaxSamples_FailsBeforeAnyLook()
+    {
+        var redactor = new MediaRedactor(ResolveFfmpegBinaryFolder());
+        var inputPath = await CreateRedThenBlueVideoAsync(Path.Combine(_tempDir, "toomany.mp4"));
+        var detector = new ScriptedDetector([]);
+
+        var result = await redactor.RedactAsync(new RedactRequest(inputPath, Path.Combine(_tempDir, "toomany-out.mp4"), Regions: []),
+            new RedactDetection(detector, SampleEvery: 0.5, MaxSamples: 5), TestContext.Current.CancellationToken);
+
+        result.Success.Should().BeFalse();
+        result.Error.Should().Contain("8 frames").And.Contain("5 allowed");
+        detector.Pictures.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData(0.0, null, "positive")]
+    [InlineData(2.0, 1.0, "not both")]
+    public async Task RedactAsync_SamplingThatMakesNoSense_IsRefusedBeforeAnyFileIsTouched(double every, double? frameAt, string reason)
+    {
+        var redactor = new MediaRedactor(ResolveFfmpegBinaryFolder());
+        var inputPath = await CreateRedThenBlueVideoAsync(Path.Combine(_tempDir, $"nonsense-{every}.mp4"));
+
+        var result = await redactor.RedactAsync(new RedactRequest(inputPath, Path.Combine(_tempDir, $"nonsense-{every}-out.mp4"), Regions: []),
+            new RedactDetection(new ScriptedDetector([]), SampleEvery: every, FrameAt: frameAt), TestContext.Current.CancellationToken);
+
+        result.Success.Should().BeFalse();
+        result.Error.Should().Contain(reason);
+    }
+
     [Fact]
     public async Task RedactAsync_LiveImage_PixelatesRegionAndLeavesRestUnchanged()
     {
