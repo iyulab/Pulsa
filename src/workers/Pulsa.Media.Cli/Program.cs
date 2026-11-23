@@ -39,7 +39,7 @@ static void PrintUsage()
           PulsaMedia.Cli draft-captions --images <path...> --intro <text> --openai-key <key> [--openai-model <model>]
           PulsaMedia.Cli redact --input <path> --output <path> --region <x>,<y>,<width>,<height>
                 [--start <seconds>] [--end <seconds>] [--ffmpeg-dir <dir>]
-          PulsaMedia.Cli transcribe --input <audio or video> --openai-key <key> [--output <file.vtt>]
+          PulsaMedia.Cli transcribe --input <audio or video> [--openai-key <key>] [--output <file.vtt>]
                 [--openai-model <model>] [--openai-endpoint <url>] [--language <bcp47>]
                 [--noise-reduction] [--no-loudness] [--max-segment <seconds>] [--min-silence <seconds>]
                 [--vocabulary <file.md>] [--glossary <file.md> --refine-model <model>] [--ffmpeg-dir <dir>]
@@ -160,9 +160,10 @@ static async Task<int> RunTranscribeAsync(string[] args)
 
     var input = Single("input");
     var apiKey = Single("openai-key");
-    if (input is null || apiKey is null)
+    var endpointUrl = Single("openai-endpoint");
+    if (input is null || (apiKey is null && endpointUrl is null))
     {
-        Console.Error.WriteLine("transcribe needs --input and --openai-key");
+        Console.Error.WriteLine("transcribe needs --input and --openai-key (the key may be left out when --openai-endpoint names a server that takes none)");
         PrintUsage();
         return 1;
     }
@@ -176,8 +177,9 @@ static async Task<int> RunTranscribeAsync(string[] args)
 
     // The command line is a host: it picks the models and takes the credential; the facade only receives clients.
     var clientOptions = new OpenAIClientOptions();
-    if (Single("openai-endpoint") is { } endpoint) clientOptions.Endpoint = new Uri(endpoint);
-    var openAi = new OpenAIClient(new System.ClientModel.ApiKeyCredential(apiKey), clientOptions);
+    if (endpointUrl is not null) clientOptions.Endpoint = new Uri(endpointUrl);
+    // The client library needs some credential; a server that takes none ignores this placeholder.
+    var openAi = new OpenAIClient(new System.ClientModel.ApiKeyCredential(apiKey ?? "no-key"), clientOptions);
     var recognizer = openAi.GetAudioClient(Single("openai-model") ?? "gpt-4o-mini-transcribe").AsISpeechToTextClient();
 
     // Terms the recognizer is told to expect: --vocabulary, else the refinement glossary. OpenAI takes them as a prompt.

@@ -33,7 +33,7 @@ public sealed class TimeMap
         for (var i = 1; i < anchors.Count; i++)
             if (anchors[i].Prepared <= anchors[i - 1].Prepared || anchors[i].Input < anchors[i - 1].Input)
                 throw new ArgumentException("Time map anchors must move forward on both timelines.", nameof(anchors));
-        Anchors = anchors;
+        Anchors = [.. anchors];
     }
 
     public IReadOnlyList<(TimeSpan Prepared, TimeSpan Input)> Anchors { get; }

@@ -142,6 +142,47 @@ public sealed class TranscriberTests : IDisposable
         result.Warnings.Should().ContainSingle().Which.Should().Contain("1–2 s");
     }
 
+    [Fact]
+    public async Task AResultWithNoLettersOrDigits_IsNoText_LikeAnEmptyOne()
+    {
+        // Recognition models answer noise and very short stretches with punctuation: "-", "...".
+        var stages = new TranscribeStages { VoiceActivity = new FakeDetector(R(1, 2), R(3, 4), R(5, 6), R(7, 8)) };
+
+        var result = await Transcriber.TranscribeAsync(new FakeRecognizer("-", "...", "네", "3"), new TranscribeRequest(TenSecondsWav()), stages, Ct);
+
+        result.Cues.Select(c => c.Text).Should().Equal("네", "3");
+        result.Warnings.Should().HaveCount(2).And.Contain(w => w.Contains("1–2 s")).And.Contain(w => w.Contains("3–4 s"));
+    }
+
+    [Fact]
+    public async Task OnAPiecewiseTimeMap_CuesStayOrderedAndDoNotOverlap()
+    {
+        // Prepared time stretches onto the input unevenly: 0–2 s → 0–6 s, 2–6 s → 6–8 s, then slope 1.
+        var map = new TimeMap([(S(0), S(0)), (S(2), S(6)), (S(6), S(8))]);
+        var preparer = new FakePreparer(new PreparedAudio(Audio.Of(Audio.Silence(9)), S(11), map));
+        var stages = new TranscribeStages { Preparer = preparer, VoiceActivity = new FakeDetector(R(1, 2.5), R(3, 5), R(6, 7), R(7.5, 9)) };
+
+        var result = await Transcriber.TranscribeAsync(new FakeRecognizer(), new TranscribeRequest(TenSecondsWav()), stages, Ct);
+
+        result.Cues.Should().HaveCount(4);
+        result.Cues.Should().OnlyContain(c => c.Start < c.End && c.End <= S(11));
+        result.Cues.Zip(result.Cues.Skip(1)).Should().OnlyContain(pair => pair.First.End <= pair.Second.Start);
+    }
+
+    [Fact]
+    public async Task ASegmentThatMapsToNoStretchOfTheInput_IsLeftOutAndNamed()
+    {
+        // Prepared 2–5 s all lands on input 3 s: there is nothing of the input to put a cue on.
+        var map = new TimeMap([(S(0), S(0)), (S(2), S(3)), (S(5), S(3))]);
+        var preparer = new FakePreparer(new PreparedAudio(Audio.Of(Audio.Silence(8)), S(6), map));
+        var stages = new TranscribeStages { Preparer = preparer, VoiceActivity = new FakeDetector(R(0.5, 1), R(3, 4)) };
+
+        var result = await Transcriber.TranscribeAsync(new FakeRecognizer("kept", "lost"), new TranscribeRequest(TenSecondsWav()), stages, Ct);
+
+        result.Cues.Should().ContainSingle().Which.Text.Should().Be("kept");
+        result.Warnings.Should().ContainSingle().Which.Should().Contain("3–4 s");
+    }
+
     // --- A speaker is one label for the whole file
 
     [Fact]
@@ -215,6 +256,19 @@ public sealed class TranscriberTests : IDisposable
         result.Cues.Select(c => (c.Start, c.End)).Should().Equal((S(1), S(2)), (S(3), S(4)));
         result.Cues.Select(c => c.Text).Should().Equal("참석자는 저 김민수 팀장", "then");
         result.Stages.Select(s => s.Stage).Should().Equal("segment", "recognize", "refine");
+    }
+
+    [Fact]
+    public async Task Refinement_CannotMergeSplitOrAddCues_WhateverTheModelAnswers()
+    {
+        // A line for a cue that does not exist, and a corrected one: the transcript keeps its two cues and their times.
+        var chat = new ReplyingChatClient("[0] fixed one\n[7] a cue that is not there");
+        var stages = new TranscribeStages { VoiceActivity = new FakeDetector(R(1, 2), R(3, 4)), Refiner = chat };
+
+        var result = await Transcriber.TranscribeAsync(new FakeRecognizer("fixt one", "two"),
+            new TranscribeRequest(TenSecondsWav()) { Glossary = new Glossary(["fixed"]) }, stages, Ct);
+
+        result.Cues.Select(c => (c.Start, c.End, c.Text)).Should().Equal((S(1), S(2), "fixed one"), (S(3), S(4), "two"));
     }
 
     [Fact]

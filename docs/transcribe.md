@@ -57,7 +57,9 @@ Each stage is a port: the caller hands in an implementation, or the stage does n
 
 - **Times are on the original audio's timeline.** Preparation never shifts time: segments found on the prepared audio
   are mapped back to the input, and every cue lies within the input's duration.
-- **Cues are in time order and do not overlap.** A cue's start is before its end.
+- **Cues are in time order and do not overlap.** A cue's start is before its end. This holds whichever preparer is
+  supplied: the time map a preparer returns can only be built moving forward on both timelines and cannot be changed
+  afterwards, and a segment that maps to no stretch of the input is left out and named in `warnings`.
 - **Timing is as fine as the segments.** The common speech-to-text port returns text for the audio it was given, not
   word times, so a cue is one segment. A recognizer that reports finer times inside a segment may split it; it never
   moves the segment's bounds.
@@ -76,11 +78,14 @@ Checked before any audio is processed, and refused with an exception:
   not 16 kHz mono PCM WAV.
 
 During the run, errors from a port are passed through and end the whole call: no partial transcript is returned.
-Cancellation also ends the call. A segment the recognizer returns no text for is dropped and named in `warnings`.
+Cancellation also ends the call. A segment the recognizer returns no text for is dropped and named in `warnings`; "no text" includes a result with no
+letter or digit in it (a lone "-" or "..." is what recognition models answer to noise), but not a made-up sentence —
+telling those apart depends on the language and the model, so it is the consumer's to filter.
 
 ## CLI
 
-`PulsaMedia.Cli transcribe --input <audio or video> --openai-key <key>` always prepares with ffmpeg and segments by
+`PulsaMedia.Cli transcribe --input <audio or video> --openai-key <key>` (the key may be left out when `--openai-endpoint`
+names a server that takes none) always prepares with ffmpeg and segments by
 silence. Options: `--output <file.vtt>` (otherwise standard output), `--openai-model`, `--openai-endpoint` (any
 OpenAI-compatible transcription server), `--language`, `--noise-reduction`, `--no-loudness`, `--max-segment`,
 `--min-silence`, `--vocabulary <file.md>` (terms sent to the recognizer as its prompt), and refinement with
@@ -107,6 +112,11 @@ terms, is decided before the first implementation.
 ## Open questions
 
 - The shape of the voice-activity and diarizer ports, and whether a model supply layer already offers them.
+- A shortest segment. A stretch of a few tens of milliseconds that crosses the silence threshold is sent to recognition
+  like any other, which costs a call and invites a made-up result. Merging it into a neighbour or dropping it with a
+  warning, and the default length, wait for real recordings from a consumer to set against.
+- The recognizer behind the port may be a consumer's own local model (a host with its own speech-to-text engine adapts
+  it to `ISpeechToTextClient`); the port takes a stream and returns text for it, which is all that case needs.
 - A recognizer that also returns speakers: whether it fills the diarize stage itself, or diarization stays a separate
   call so speaker labels hold across segments.
 - Recognition is called once per segment today, and the times a recognizer reports inside a segment are not used yet

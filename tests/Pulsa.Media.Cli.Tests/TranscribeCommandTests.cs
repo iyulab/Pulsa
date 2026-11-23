@@ -65,12 +65,26 @@ public sealed class TranscribeCommandTests : IDisposable
     }
 
     [Fact]
-    public async Task Transcribe_WithoutAKey_ExitsOneWithUsage()
+    public async Task Transcribe_WithoutAKeyOrAnEndpoint_ExitsOneWithUsage()
     {
         var (exitCode, _, stderr) = await RunAsync("transcribe", "--input", "speech.m4a");
 
         exitCode.Should().Be(1);
         stderr.Should().Contain("--openai-key");
+    }
+
+    [Fact]
+    public async Task Transcribe_AnEndpointNeedsNoKey_ForAServerThatTakesNone()
+    {
+        var input = await TwoTonesAsync();
+        var output = Path.Combine(_tempDir, "speech.vtt");
+        using var endpoint = new FakeTranscriptionEndpoint();
+
+        var (exitCode, _, stderr) = await RunAsync(
+            "transcribe", "--input", input, "--output", output, "--openai-endpoint", endpoint.Url);
+
+        exitCode.Should().Be(0, stderr);
+        endpoint.Requests.Should().Be(2);
     }
 
     [Fact]

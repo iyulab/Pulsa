@@ -132,7 +132,8 @@ public static class Transcriber
             var response = await recognizer.GetTextAsync(stream, callOptions, cancellationToken);
             recognitionModel ??= response.ModelId;
             var text = response.Text.Trim();
-            if (text.Length == 0)
+            // Models answer noise and very short stretches with punctuation ("-", "..."): no letter or digit is no text.
+            if (!text.Any(char.IsLetterOrDigit))
                 warnings.Add($"No text was recognized for {Format(segment)}; the segment is left out.");
             else
                 recognized.Add((segment, text));

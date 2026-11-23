@@ -10,7 +10,7 @@ maintainer who publishes it.
   `ISpeechToTextClient`, with optional voice-activity, diarization and refinement stages as ports and built-in
   silence detection. `PulsaMedia` adds `FfmpegAudioPreparer` (any audio or video → 16 kHz mono, optional loudness
   normalization and noise reduction) and `PulsaMedia.Cli transcribe` writes WebVTT through an OpenAI or OpenAI-compatible
-  transcription endpoint. Contract: `docs/transcribe.md`. Carries the `MEAI001` evaluation diagnostic.
+  transcription endpoint. Contract: `docs/transcribe.md`. Carries the `MEAI001` evaluation diagnostic. A result with no letter or digit counts as no text, a `TimeMap` cannot be changed after it is built, and `transcribe` needs no `--openai-key` when `--openai-endpoint` names a server that takes none.
 - `TranscriptScore`: word and character error rates between a reference and a transcript, normalized alike;
   `PulsaMedia.Cli score` prints them for two files.
 - `TranscribeRequest.Recognition`: the options every recognition call starts from (model, provider settings such as a
