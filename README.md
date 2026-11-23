@@ -7,14 +7,18 @@
 **Parts for building AI agents and AI services — each one a self-contained capability that a product needs but should
 not build into its own core.**
 
-Pulsa is a set of components *for* AI: what uses them is an agent or an AI service. Each capability is split off on its
-own and put behind a contract. It carries its own dependencies, is tested and versioned on its own,
+Pulsa is a set of components *for* agents and AI services: what uses them is an agent or an AI service. Each capability
+is split off on its own and put behind a contract. It carries its own dependencies, is tested and versioned on its own,
 and can run in its own process. The model, the configuration, the credentials and the host's policies stay with the
-product that uses it. Most capabilities pair a model the caller supplies with the processing that makes it useful for
-one kind of work: parsing, validation, media handling, and the guarantees a model alone cannot give. Every capability
-has a role for a model. Either the model is required, or the capability runs deterministically without one and does
-more when it is handed one. Redaction, for example, hides the region it is told today; given a vision model it is to
-find what to hide.
+product that uses it. Two kinds of capability sit side by side. In an *AI tool* the model works inside the tool: the
+caller supplies it, and the capability adds the processing that makes it useful for one kind of work — parsing,
+validation, media handling, and the guarantees a model alone cannot give. In an *agent tool* the model is the agent
+outside and the tool is its hands: a messaging channel, a connector to an outside service. Both are admitted by the
+same door below.
+
+A contract states the capability's model role. The model is required; or the capability runs deterministically without
+one and does more when it is handed one (redaction hides the region it is told today; given a vision model it is to
+find what to hide); or it has none, as a connector does.
 
 A capability is defined by its contract, not by a programming language or by one way of calling it. What it has to do
 is perform the part a consuming application needs, reliably. It reaches that application in whichever way suits it;
@@ -51,11 +55,11 @@ core. A capability belongs here when:
   are for.
 - **It can be handed over as a contract.** Its inputs, results and invariants can be written down without reference
   to a language, and an agent could use that contract as a tool. It does not have to ship an MCP server: a capability
-  offers the ways its consumers need.
-- **It has a role for a model.** Handed an LLM, a vision model or another model handler, the capability can do more
-  than it does without one. A capability with nothing for a model to do, however useful, is not admitted.
+  offers the ways its consumers need. If it works with a model, or reaches the outside world for an agent, the
+  contract says how (model role; what it can reach, and the safety hints a host reads).
 
-A single prompt or a single call is not a capability and stays in the application. A capability whose value comes
+What any agent runtime carries by default, with no dependency boundary of its own, stays in the runtime and is not a
+Pulsa capability. A single prompt or a single call is not a capability and stays in the application. A capability whose value comes
 from one application's domain stays in that application's own plugin. Who accepts a new capability, and on what
 evidence, is in [CONTRIBUTING.md](CONTRIBUTING.md).
 

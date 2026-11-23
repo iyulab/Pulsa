@@ -5,6 +5,9 @@ maintainer who publishes it.
 
 ## Unreleased
 
+- **Charter: general agent tools are admitted alongside AI tools.** The condition that a capability must have a role for a model is
+  removed; the model role is stated in the contract instead (required, extends, or none). The door is the three remaining conditions
+  (reusable unit, dependency boundary or own process, contract). Documentation only; no package changes.
 - **Build: no machine-specific package source.** `Directory.Build.props` no longer adds a local package folder to the
   restore sources; packages restore from the configured NuGet sources only. The build workflow now also runs when the
   shared build settings at the repository root change (`Directory.*.props`, the solution, `global.json`). No package changes.
