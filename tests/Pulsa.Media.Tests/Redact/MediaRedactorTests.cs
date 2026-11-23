@@ -151,17 +151,80 @@ public class MediaRedactorTests : IDisposable
         File.Exists(outputPath).Should().BeFalse();
     }
 
+    /// <summary>Keeps a copy of the picture it is handed, and where it was.</summary>
+    private sealed class CapturingDetector(string copyTo, params DetectedRegion[] regions) : IRegionDetector
+    {
+        public string? PicturePath { get; private set; }
+        public (int Width, int Height)? Seen { get; private set; }
+        public string Name => "capturing";
+
+        public Task<IReadOnlyList<DetectedRegion>> DetectAsync(string imagePath, int width, int height, CancellationToken cancellationToken)
+        {
+            PicturePath = imagePath;
+            Seen = (width, height);
+            File.Copy(imagePath, copyTo, overwrite: true);
+            return Task.FromResult<IReadOnlyList<DetectedRegion>>(regions);
+        }
+    }
+
+    [Theory]
+    [InlineData(null, 1.0, "red")]   // no frame given: the start of the time range
+    [InlineData(3.0, 1.0, "blue")]   // a frame given: that one, wherever the time range is
+    [InlineData(null, null, "red")]  // neither: the first frame
+    public async Task RedactAsync_LiveVideo_WithADetector_LooksAtOneFrame_AndHidesWhatItFindsOverTheTimeRange(
+        double? frameAt, double? start, string expectedColor)
+    {
+        var redactor = new MediaRedactor(ResolveFfmpegBinaryFolder());
+        var inputPath = await CreateRedThenBlueVideoAsync(Path.Combine(_tempDir, $"colors-{expectedColor}-{frameAt}-{start}.mp4"));
+        var outputPath = Path.Combine(_tempDir, $"colors-{expectedColor}-{frameAt}-{start}-out.mp4");
+        var seenCopy = Path.Combine(_tempDir, $"seen-{expectedColor}-{frameAt}-{start}.png");
+        var detector = new CapturingDetector(seenCopy, new DetectedRegion(new RedactRegion(10, 10, 50, 30), "face", 0.9));
+
+        var result = await redactor.RedactAsync(
+            new RedactRequest(inputPath, outputPath, Regions: [], StartTime: start, EndTime: start is null ? null : 3.5),
+            new RedactDetection(detector, FrameAt: frameAt), TestContext.Current.CancellationToken);
+
+        result.Success.Should().BeTrue(because: result.Error);
+        detector.Seen.Should().Be((200, 100));
+        result.Detected.Should().ContainSingle().Which.Region.Should().Be(new RedactRegion(10, 10, 50, 30));
+        var centre = await CropToRawRgbAsync(seenCopy, 100, 50, 1, 1);
+        (expectedColor == "red" ? centre[0] > 200 && centre[2] < 60 : centre[2] > 200 && centre[0] < 60)
+            .Should().BeTrue($"the detector should have been given the {expectedColor} frame, got rgb {string.Join(',', centre)}");
+        Path.GetExtension(detector.PicturePath).Should().Be(".png");
+        File.Exists(detector.PicturePath).Should().BeFalse("the frame taken for the detector is removed afterwards");
+        var probe = await FFProbe.AnalyseAsync(outputPath, ffOptions: new FFOptions { BinaryFolder = ResolveFfmpegBinaryFolder() }, cancellationToken: TestContext.Current.CancellationToken);
+        probe.Duration.TotalSeconds.Should().BeApproximately(4, precision: 0.5);
+        probe.PrimaryVideoStream!.Width.Should().Be(200);
+    }
+
     [Fact]
-    public async Task RedactAsync_WithADetectorOnAVideo_IsRefused()
+    public async Task RedactAsync_LiveVideo_AFrameAfterTheEnd_FailsAndWritesNothing()
+    {
+        var redactor = new MediaRedactor(ResolveFfmpegBinaryFolder());
+        var inputPath = await CreateRedThenBlueVideoAsync(Path.Combine(_tempDir, "short.mp4"));
+        var outputPath = Path.Combine(_tempDir, "short-out.mp4");
+        var detector = new FixedDetector(new DetectedRegion(new RedactRegion(10, 10, 50, 30), "face", 0.9));
+
+        var result = await redactor.RedactAsync(new RedactRequest(inputPath, outputPath, Regions: []),
+            new RedactDetection(detector, FrameAt: 60), TestContext.Current.CancellationToken);
+
+        result.Success.Should().BeFalse();
+        result.Error.Should().Contain("no picture");
+        detector.Seen.Should().BeNull("the detector is not asked about a picture that does not exist");
+        File.Exists(outputPath).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task RedactAsync_ANegativeFrameTime_IsRefused()
     {
         var inputPath = Path.Combine(_tempDir, "clip.mp4");
         await File.WriteAllBytesAsync(inputPath, [0], TestContext.Current.CancellationToken);
 
         var result = await _redactor.RedactAsync(new RedactRequest(inputPath, Path.Combine(_tempDir, "o.mp4"), Regions: []),
-            new RedactDetection(new FixedDetector()), TestContext.Current.CancellationToken);
+            new RedactDetection(new FixedDetector(), FrameAt: -1), TestContext.Current.CancellationToken);
 
         result.Success.Should().BeFalse();
-        result.Error.Should().Contain("images only");
+        result.Error.Should().Contain("frame");
     }
 
     [Fact]
@@ -244,6 +307,20 @@ public class MediaRedactorTests : IDisposable
                 .WithCustomArgument("-f rawvideo"))
             .ProcessAsynchronously(ffMpegOptions: new FFOptions { BinaryFolder = ResolveFfmpegBinaryFolder() });
         return await File.ReadAllBytesAsync(rawPath);
+    }
+
+    /// <summary>Four seconds, 200x100: red for the first two, blue for the last two — so which frame was taken shows in its colour.</summary>
+    private static async Task<string> CreateRedThenBlueVideoAsync(string path)
+    {
+        await FFMpegArguments
+            .FromFileInput("color=c=red:s=200x100:d=2:r=10", verifyExists: false, opt => opt.WithCustomArgument("-f lavfi"))
+            .AddFileInput("color=c=blue:s=200x100:d=2:r=10", verifyExists: false, opt => opt.WithCustomArgument("-f lavfi"))
+            .OutputToFile(path, overwrite: true, opt => opt
+                .WithCustomArgument("-filter_complex \"[0:v][1:v]concat=n=2:v=1:a=0[v]\" -map \"[v]\"")
+                .WithVideoCodec("libx264")
+                .WithCustomArgument("-pix_fmt yuv420p"))
+            .ProcessAsynchronously(ffMpegOptions: new FFOptions { BinaryFolder = ResolveFfmpegBinaryFolder() });
+        return path;
     }
 
     private static async Task<string> CreateTestVideoAsync(string path, int width, int height, double durationSeconds)

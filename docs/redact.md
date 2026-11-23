@@ -1,7 +1,7 @@
 # Redaction — contract
 
 Pixelates rectangular regions of an image, or of a video over a time range, and writes the result to a new file. Given
-a vision or detection model, it finds the regions to hide in an image.
+a vision or detection model, it finds the regions to hide in an image, or in one frame of a video.
 Status: pre-1.0 — names and shapes may change in a minor version.
 
 - **Module**: `PulsaMedia`, which brings ffmpeg. The caller names its folder, or it is found on `PATH`.
@@ -10,7 +10,12 @@ Status: pre-1.0 — names and shapes may change in a minor version.
   unreadable and changes nothing else. Given a detector — a vision model behind `IChatClient` (`ChatRegionDetector`) or
   another detection model behind the port (`IRegionDetector`: image, width, height → regions with a label and a
   confidence) — it finds what to redact in an image (a face, a licence plate, a name on screen). Each found region is
-  checked by the code, and a doubtful one is returned for review instead of hidden. Video detection is not built yet.
+  checked by the code, and a doubtful one is returned for review instead of hidden. In a video the detector looks at one
+  frame (the caller picks the time) and what it finds is hidden over the whole time range as fixed rectangles; finding
+  things as they move is not built yet.
+- **Hosts**: runs in a trimmed or native-AOT application. The picture size is read from ffprobe's JSON without
+  reflection, and the package sets `IsAotCompatible`, which keeps reflection-based code of its own out. (Checked by
+  running a trimmed, self-contained publish; FFMpegCore's own probe call fails there, which is why it is not used.)
 
 ## Input
 
@@ -19,12 +24,13 @@ Status: pre-1.0 — names and shapes may change in a minor version.
 | input | an existing image or video. Files ending in `.png`, `.jpg`, `.jpeg`, `.webp`, `.bmp` or `.gif` are read as images; anything else is read as video |
 | output | a new path; **must not exist** |
 | regions | one or more `x, y, width, height`, in pixels of the source's own resolution; may be empty when a detector is given |
-| detection | optional: a detector and the confidence (0–1, default 0.5) a found region needs to be hidden. Images only |
+| detection | optional: a detector, the confidence (0–1, default 0.5) a found region needs to be hidden, and for a video the time in seconds of the frame the detector looks at (default: the start of the time range, else the first frame) |
 | start · end | for a video only, in seconds. Either may be left out: no start means from the beginning, no end means to the end. Both are ignored for an image |
 
 On the CLI a region is written `--region x,y,width,height`, as four whole numbers, and several may follow one
 `--region`. Anything else is refused before any file is touched. `--detect <what to hide> --openai-key <key>` (with
-`--openai-model`, `--openai-endpoint`, `--min-confidence`) asks a vision model.
+`--openai-model`, `--openai-endpoint`, `--min-confidence`, and for a video `--frame-at <seconds>`) asks a vision model;
+the key may be left out when `--openai-endpoint` names a server that takes none.
 
 ## Result
 
@@ -43,6 +49,13 @@ On the CLI a region is written `--region x,y,width,height`, as four whole number
 - A detected region is never trusted as given: it is clipped to the picture, and one with less than 2 pixels inside on
   either side is refused. Only a region at or above the confidence bar is hidden; a box without a confidence counts as 0.
 
+## Open questions
+
+- Following a thing as it moves: the detector is asked once, so a person who walks out of the rectangle is not hidden
+  further on. Sampling frames and tracking between them is the next step, built on this one.
+- A video that is rotated by metadata: the frame is taken after the rotation is applied, and so are the rectangles, but
+  this is checked with an unrotated video only.
+
 ## Failures
 
 Nothing is thrown. The result carries `success: false` and an `error` sentence when:
@@ -50,7 +63,8 @@ Nothing is thrown. The result carries `success: false` and an `error` sentence w
 - the input is missing;
 - the output already exists;
 - there is nothing to redact (no regions and no detector), or the detector found nothing confident enough;
-- a detector is given for a video;
+- a video has no picture at the frame time asked for (after its end);
+- the frame time is negative;
 - ffmpeg fails, for example on an input it cannot decode.
 
 Cancellation also ends in `success: false`, with the reason in `error`. A failed or cancelled run does not promise to

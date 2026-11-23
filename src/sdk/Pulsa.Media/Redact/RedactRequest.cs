@@ -45,5 +45,9 @@ public interface IRegionDetector
     Task<IReadOnlyList<DetectedRegion>> DetectAsync(string imagePath, int width, int height, CancellationToken cancellationToken);
 }
 
-/// <summary>Redaction's extending stage: a detector, and the confidence a found region needs to be hidden (default 0.5).</summary>
-public sealed record RedactDetection(IRegionDetector Detector, double MinimumConfidence = 0.5);
+/// <summary>
+/// Redaction's extending stage: a detector, and the confidence a found region needs to be hidden (default 0.5).
+/// For a video the detector looks at one picture — the frame at <paramref name="FrameAt"/> seconds (default: the start
+/// of the time range, else the first frame) — and what it finds is hidden as fixed rectangles over the whole time range.
+/// </summary>
+public sealed record RedactDetection(IRegionDetector Detector, double MinimumConfidence = 0.5, double? FrameAt = null);

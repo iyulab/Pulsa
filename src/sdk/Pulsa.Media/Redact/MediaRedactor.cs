@@ -5,9 +5,9 @@ namespace PulsaRedact;
 /// <summary>
 /// Pixelates rectangular regions of an image or video via a single ffmpeg pass. Image vs. video is decided by file
 /// extension (as the video composer does — no content-sniffing). No motion tracking: each region is one fixed rectangle
-/// for the whole applicable time range. Given a detector (images only, for now), it also finds what to hide: the code
-/// checks each found region against the picture and hides only those above the confidence bar, returning the rest for
-/// review.
+/// for the whole applicable time range. Given a detector, it also finds what to hide: in an image, in the picture; in a
+/// video, in the one frame the caller picks, and what it finds is hidden over the whole time range. The code checks each
+/// found region against the picture and hides only those above the confidence bar, returning the rest for review.
 /// </summary>
 public sealed class MediaRedactor
 {
@@ -37,12 +37,12 @@ public sealed class MediaRedactor
             return new RedactResult(false, null, $"{request.InputPath} does not exist");
 
         var isImage = ImageExtensions.Contains(Path.GetExtension(request.InputPath));
-        if (detection is not null && !isImage)
-            return new RedactResult(false, null, "Detection works on images only for now; give the regions for a video.");
         if (detection is null && request.Regions.Count == 0)
             return new RedactResult(false, null, "There is nothing to redact: no regions and no detector.");
         if (detection is { MinimumConfidence: < 0 or > 1 })
             return new RedactResult(false, null, "The minimum confidence must be between 0 and 1.");
+        if (detection is { FrameAt: < 0 })
+            return new RedactResult(false, null, "The frame to look at must not be before the start of the video.");
 
         try
         {
@@ -51,29 +51,52 @@ public sealed class MediaRedactor
             List<string> notes = [];
             if (detection is not null)
             {
-                var probe = await FFProbe.AnalyseAsync(request.InputPath, _ffOptions, cancellationToken);
-                var frame = probe.PrimaryVideoStream
-                    ?? throw new InvalidDataException($"{request.InputPath} has no picture to look at.");
-                var found = await detection.Detector.DetectAsync(request.InputPath, frame.Width, frame.Height, cancellationToken);
-                foreach (var candidate in found)
+                // The picture the detector looks at: the image itself, or for a video one frame taken out of it. Its
+                // size is read from that picture, so regions are in the coordinates the pixelate filter sees (a video
+                // with rotation metadata is turned upright when decoded, and so is the frame).
+                string picture = request.InputPath, frameFile = string.Empty;
+                try
                 {
-                    var clipped = Clip(candidate.Region, frame.Width, frame.Height);
-                    if (clipped is null)
+                    if (!isImage)
                     {
-                        notes.Add($"Refused '{candidate.Label}' at {Describe(candidate.Region)}: it lies outside the " +
-                                  $"{frame.Width}x{frame.Height} picture or is under {MinimumDetectedSide} px once clipped.");
-                        continue;
+                        var at = detection.FrameAt ?? request.StartTime ?? 0;
+                        frameFile = Path.Combine(Path.GetTempPath(), $"pulsa-redact-frame-{Guid.NewGuid():N}.png");
+                        await FFMpegArguments
+                            .FromFileInput(request.InputPath, verifyExists: true, opt => opt.Seek(TimeSpan.FromSeconds(at)))
+                            .OutputToFile(frameFile, overwrite: true, opt => opt.WithCustomArgument("-frames:v 1"))
+                            .CancellableThrough(cancellationToken)
+                            .ProcessAsynchronously(ffMpegOptions: _ffOptions);
+                        if (!File.Exists(frameFile) || new FileInfo(frameFile).Length == 0)
+                            return new RedactResult(false, null, $"There is no picture at {at:0.###} s in {request.InputPath}.");
+                        picture = frameFile;
                     }
-                    var checkedRegion = candidate with { Region = clipped.Value };
-                    if (candidate.Confidence >= detection.MinimumConfidence)
+
+                    var (width, height) = await PictureSize.ReadAsync(picture, _ffOptions, cancellationToken);
+                    var found = await detection.Detector.DetectAsync(picture, width, height, cancellationToken);
+                    foreach (var candidate in found)
                     {
-                        hidden.Add(checkedRegion);
-                        regions.Add(clipped.Value);
+                        var clipped = Clip(candidate.Region, width, height);
+                        if (clipped is null)
+                        {
+                            notes.Add($"Refused '{candidate.Label}' at {Describe(candidate.Region)}: it lies outside the " +
+                                      $"{width}x{height} picture or is under {MinimumDetectedSide} px once clipped.");
+                            continue;
+                        }
+                        var checkedRegion = candidate with { Region = clipped.Value };
+                        if (candidate.Confidence >= detection.MinimumConfidence)
+                        {
+                            hidden.Add(checkedRegion);
+                            regions.Add(clipped.Value);
+                        }
+                        else
+                        {
+                            review.Add(checkedRegion);
+                        }
                     }
-                    else
-                    {
-                        review.Add(checkedRegion);
-                    }
+                }
+                finally
+                {
+                    if (frameFile.Length > 0 && File.Exists(frameFile)) File.Delete(frameFile);
                 }
             }
 

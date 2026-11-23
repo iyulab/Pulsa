@@ -32,8 +32,9 @@ static void PrintUsage()
           PulsaMedia.Cli draft-captions --images <path...> --intro <text> --openai-key <key> [--openai-model <model>]
           PulsaMedia.Cli redact --input <path> --output <path> --region <x>,<y>,<width>,<height> [<x>,<y>,<width>,<height> ...]
                 [--start <seconds>] [--end <seconds>] [--ffmpeg-dir <dir>]
-          PulsaMedia.Cli redact --input <image> --output <path> --detect <what to hide> --openai-key <key>
-                [--openai-model <model>] [--openai-endpoint <url>] [--min-confidence <0-1>] [--region ...] [--ffmpeg-dir <dir>]
+          PulsaMedia.Cli redact --input <image or video> --output <path> --detect <what to hide> [--openai-key <key>]
+                [--openai-model <model>] [--openai-endpoint <url>] [--min-confidence <0-1>]
+                [--frame-at <seconds>] [--start <seconds>] [--end <seconds>] [--region ...] [--ffmpeg-dir <dir>]
         """);
 }
 
@@ -96,6 +97,14 @@ static async Task<int> RunDraftCaptionsAsync(string[] args)
     return 0;
 }
 
+static OpenAIClient CreateOpenAiClient(string? apiKey, string? endpoint)
+{
+    var clientOptions = new OpenAIClientOptions();
+    if (endpoint is not null) clientOptions.Endpoint = new Uri(endpoint);
+    // The client library needs some credential; a server that takes none ignores this placeholder.
+    return new OpenAIClient(new System.ClientModel.ApiKeyCredential(apiKey ?? "no-key"), clientOptions);
+}
+
 static async Task<int> RunRedactAsync(string[] args)
 {
     var options = ParseFlags(args);
@@ -133,17 +142,16 @@ static async Task<int> RunRedactAsync(string[] args)
     RedactDetection? detection = null;
     if (detect is not null)
     {
-        if (Single("openai-key") is not { } apiKey)
+        if (Single("openai-key") is null && Single("openai-endpoint") is null)
         {
-            Console.Error.WriteLine("--detect needs --openai-key: detection asks a vision model");
+            Console.Error.WriteLine("--detect needs --openai-key: detection asks a vision model (the key may be left out when --openai-endpoint names a server that takes none)");
             return 1;
         }
         // The command line is a host: it picks the vision model and takes the credential.
-        var clientOptions = new OpenAIClientOptions();
-        if (Single("openai-endpoint") is { } endpoint) clientOptions.Endpoint = new Uri(endpoint);
-        var vision = new OpenAIClient(new System.ClientModel.ApiKeyCredential(apiKey), clientOptions)
+        var vision = CreateOpenAiClient(Single("openai-key"), Single("openai-endpoint"))
             .GetChatClient(Single("openai-model") ?? "gpt-4o-mini").AsIChatClient();
-        detection = new RedactDetection(new ChatRegionDetector(vision, detect), Number("min-confidence") ?? 0.5);
+        // For a video the model looks at one frame (--frame-at, default the start of --start..--end); what it finds is hidden over the whole range.
+        detection = new RedactDetection(new ChatRegionDetector(vision, detect), Number("min-confidence") ?? 0.5, Number("frame-at"));
     }
 
     // No --ffmpeg-dir: ffmpeg is looked up on PATH.

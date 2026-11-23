@@ -2,6 +2,8 @@
 
   <PropertyGroup>
     <Version>0.0.0</Version>
+    <!-- Runs in a trimmed or native-AOT host: the analyzers keep reflection-based code out of this package. -->
+    <IsAotCompatible>true</IsAotCompatible>
     <Description>Pulsa's ffmpeg module — every Pulsa capability that needs ffmpeg, in one package: compose images and captions into a captioned, Ken Burns–animated video, and pixelate regions of an image or a time range of a video — given a vision model, finding what to hide. Host-agnostic.</Description>
     <PackageTags>pulsa;ffmpeg;video;ken-burns;redact;privacy;pixelate</PackageTags>
   </PropertyGroup>
